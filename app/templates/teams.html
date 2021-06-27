@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block app_content %}
+    {% for team in teams %}
+        <h4><a href="/teams/{{team.id}}">Team: {{team.display_name}} (id: {{team.id}})</a></h4>
+        Players:
+        {% for user in team.users %}
+            <a href="/users/{{user.id}}">{{user.username}}</a>,
+        {% endfor %}
+    {% endfor %}
+    <hr>
+    {{form}}
+
+{% endblock %}

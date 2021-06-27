@@ -1,7 +1,10 @@
 from datetime import datetime
 from hashlib import md5
+from time import time
 
+from flask import current_app
 from flask_login import UserMixin
+import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from app import db
@@ -18,6 +21,7 @@ class BaseModel(db.Model):
 
 
 class User(UserMixin, BaseModel):
+    is_active = db.Column(db.Boolean, default=True)
     is_admin = db.Column(db.Boolean, default=False)
     is_manager = db.Column(db.Boolean, default=False)
     is_cashier = db.Column(db.Boolean, default=False)
@@ -27,6 +31,8 @@ class User(UserMixin, BaseModel):
     faculty_number = db.Column(db.String(120), index=True)
     password_hash = db.Column(db.String(120))
     team_id = db.Column(db.Integer, db.ForeignKey('team.id'))
+    token = db.Column(db.String(32), index=True, unique=True)
+    token_expiration = db.Column(db.DateTime)
 
     def __repr__(self):
         return f'<User {self.username}>'
@@ -36,6 +42,21 @@ class User(UserMixin, BaseModel):
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
+
+    def get_reset_password_token(self, expires_in=600):
+        return jwt.encode(
+            {'reset_password': self.id, 'exp': time() + expires_in},
+            current_app.config['SECRET_KEY'],
+            algorithm='HS256')
+
+    @staticmethod
+    def verify_reset_password_token(token):
+        try:
+            id = jwt.decode(token, current_app.config['SECRET_KEY'],
+                            algorithms=['HS256'])['reset_password']
+        except:
+            return
+        return User.query.get(id)
 
     @login.user_loader
     def load_user(id):
@@ -49,6 +70,8 @@ class User(UserMixin, BaseModel):
 
 class Team(BaseModel):
     input = db.relationship('Input', backref='team', lazy='dynamic')
+    display_name = db.Column(db.String(64))
+    is_active = db.Column(db.Boolean, default=True)
     users = db.relationship('User', backref='team', lazy='dynamic')
     game_id = db.Column(db.Integer, db.ForeignKey('game.id'))
 
