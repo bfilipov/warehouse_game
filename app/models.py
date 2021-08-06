@@ -94,15 +94,26 @@ class Input(BaseModel):
     team_id = db.Column(db.Integer, db.ForeignKey('team.id'))
     approved_by_admin = db.Column(db.Boolean, default=False)
 
+# activity_requirements = db.Table('activity_requirements', BaseModel.metadata,
+#     db.Column('target_activity_id', db.Integer, db.ForeignKey('activities.id')),
+#     db.Column('requirement_activity_id', db.Integer, db.ForeignKey('activities.id')))
 
 class Activity(BaseModel):
+    id = db.Column(db.Integer, primary_key=True, index=True, onupdate="cascade")
     name = db.Column(db.String(64))
     description = db.Column(db.Text())
+    days_needed = db.Column(db.Integer, default=1)
+    # requirements = db.relationship('ActivityRequirements')
+
+class ActivityRequirement(BaseModel):
+    # id = db.Column(db.Integer , primary_key=True , autoincrement=True)
+    activity_id = db.Column(db.Integer, db.ForeignKey('activity.id', ondelete="cascade"))
+    requirement_id = db.Column(db.Integer, db.ForeignKey('activity.id', ondelete="cascade"))
+
+class TeamActivity(BaseModel):
+    team = db.Column(db.Integer, db.ForeignKey('team.id'))
     is_completed = db.Column(db.Boolean, default=False)
     is_started = db.Column(db.Boolean, default=False)
-    days_needed = db.Column(db.Integer, default=1)
-    requirements = db.Column(db.ARRAY(db.Integer))
-
 
 class Period(BaseModel):
     id = db.Column(db.String(64), primary_key=True, index=True)
