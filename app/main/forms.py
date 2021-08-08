@@ -1,13 +1,15 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, IntegerField, PasswordField, BooleanField, SubmitField, FloatField, SelectField
-from wtforms.validators import DataRequired, Email, EqualTo, ValidationError, NumberRange
+from wtforms import StringField, IntegerField, PasswordField, BooleanField, SubmitField, FloatField, SelectField, \
+    RadioField
+from wtforms.validators import DataRequired, Email, EqualTo, ValidationError, NumberRange, Optional
 
 from app.models import User
 
 
 class TeamAssign(FlaskForm):
-    user = SelectField('Player', validators=[DataRequired()])
-    submit = SubmitField('Add')
+    is_active = BooleanField('Is Active?', validators=[])
+    user = SelectField('Player', validators=[Optional()])
+    submit = SubmitField('Save')
 
 
 class UserForm(FlaskForm):
@@ -19,3 +21,20 @@ class UserForm(FlaskForm):
     faculty_number = StringField('faculty_number', validators=[DataRequired()])
     team_id = SelectField('Team', validators=[DataRequired()])
     submit = SubmitField('Save')
+
+
+class GameAssignForm(FlaskForm):
+    team = SelectField('Add Team', validators=[DataRequired()])
+    submit = SubmitField('Add')
+
+
+class GameCreateForm(FlaskForm):
+    submit = SubmitField('New Game')
+
+
+class GamePlayForm(FlaskForm):
+    increase_period = RadioField('Label', choices=[('increase', 'Increase period'), ('decrease', 'Decrease period')])
+    submit = SubmitField('Save')
+
+class GameUserForm(FlaskForm):
+    pass

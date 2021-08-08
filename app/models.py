@@ -81,6 +81,15 @@ class Game(BaseModel):
     is_active = db.Column(db.Boolean, default=True)
     teams = db.relationship('Team', backref='game', lazy='dynamic')
 
+    def increase_current_day(self, days):
+        self.current_day += days
+
+    def decrease_current_day(self, days):
+        new_day = self.current_day - days
+        if new_day <= 0:
+            new_day = 1
+        self.current_day = new_day
+
 
 class Settings(BaseModel):
     game_id = db.Column(db.Integer, db.ForeignKey('game.id'), unique=True)
@@ -94,26 +103,26 @@ class Input(BaseModel):
     team_id = db.Column(db.Integer, db.ForeignKey('team.id'))
     approved_by_admin = db.Column(db.Boolean, default=False)
 
-# activity_requirements = db.Table('activity_requirements', BaseModel.metadata,
-#     db.Column('target_activity_id', db.Integer, db.ForeignKey('activities.id')),
-#     db.Column('requirement_activity_id', db.Integer, db.ForeignKey('activities.id')))
 
 class Activity(BaseModel):
-    id = db.Column(db.Integer, primary_key=True, index=True, onupdate="cascade")
-    name = db.Column(db.String(64))
+    id = db.Column(db.String(64), primary_key=True, index=True, onupdate="cascade")
+    title = db.Column(db.Text())
     description = db.Column(db.Text())
     days_needed = db.Column(db.Integer, default=1)
-    # requirements = db.relationship('ActivityRequirements')
+    cost = db.Column(db.Integer, default=100)
+
 
 class ActivityRequirement(BaseModel):
     # id = db.Column(db.Integer , primary_key=True , autoincrement=True)
-    activity_id = db.Column(db.Integer, db.ForeignKey('activity.id', ondelete="cascade"))
-    requirement_id = db.Column(db.Integer, db.ForeignKey('activity.id', ondelete="cascade"))
+    activity_id = db.Column(db.String(64), db.ForeignKey('activity.id', ondelete="cascade"))
+    requirement_id = db.Column(db.String(64), db.ForeignKey('activity.id', ondelete="cascade"))
+
 
 class TeamActivity(BaseModel):
     team = db.Column(db.Integer, db.ForeignKey('team.id'))
     is_completed = db.Column(db.Boolean, default=False)
     is_started = db.Column(db.Boolean, default=False)
+
 
 class Period(BaseModel):
     id = db.Column(db.String(64), primary_key=True, index=True)

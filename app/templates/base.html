@@ -24,6 +24,9 @@
                     {% if current_user.is_anonymous %}
                         <li><a href="{{ url_for('auth.login') }}">Login</a></li>
                     {% elif current_user.is_admin %}
+                        <li><a href="{{ url_for('main.games') }}">Games</a></li>
+                        <li><a href="{{ url_for('main.teams') }}">Teams</a></li>
+                        <li><a href="{{ url_for('main.users') }}">Users</a></li>
                         <li><a href="{{ url_for('auth.register') }}">Register New User</a></li>
                         <li><a href="{{ url_for('auth.logout') }}">Logout</a></li>
                     {% else %}

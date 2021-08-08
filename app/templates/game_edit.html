@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% import 'bootstrap/wtf.html' as wtf %}
+{% block app_content %}
+
+    <h1>Game: {{game.id}}</h1>
+    <h2>Current day: {{game.current_day}}</h2>
+
+    <h3>Teams:</h3>
+    {% for team in game.teams %}
+        <p><a href="/teams/{{team.id}}">{{team.display_name}}</a></p>
+    {% endfor %}
+    <br><br>
+    <div class="row">
+        <div class="col-md-4">
+            {{ wtf.quick_form(form) }}
+        </div>
+    </div>
+    <br><br>
+    <a href="/games/{{game.id}}" type="button" class="btn btn-light">Back</a>
+{% endblock %}
