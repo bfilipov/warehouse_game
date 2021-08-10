@@ -30,7 +30,7 @@
                         <li><a href="{{ url_for('auth.register') }}">Register New User</a></li>
                         <li><a href="{{ url_for('auth.logout') }}">Logout</a></li>
                     {% else %}
-
+                        <li><a href="{{ url_for('main.play') }}">Game</a></li>
                     {% endif %}
                 </ul>
             </div>

@@ -99,8 +99,11 @@ class Input(BaseModel):
     id = db.Column(db.String(64), primary_key=True, index=True)
     credit = db.Column(db.Integer, default=0)
     # activities = db.relationship('Activity', backref='input', lazy='dynamic')
-    activities = db.Column(db.ARRAY(db.Integer))
+    activity1 = db.Column(db.String(64))
+    activity2 = db.Column(db.String(64))
+    activity3 = db.Column(db.String(64))
     team_id = db.Column(db.Integer, db.ForeignKey('team.id'))
+    period_id = db.Column(db.String(64), db.ForeignKey('period.id'))
     approved_by_admin = db.Column(db.Boolean, default=False)
 
 
@@ -129,7 +132,7 @@ class Period(BaseModel):
     game_id = db.Column(db.Integer, db.ForeignKey('game.id'))
     team_id = db.Column(db.Integer, db.ForeignKey('team.id'))
     period_number = db.Column(db.Integer)
-    input_id = db.Column(db.String(64), db.ForeignKey('input.id'))  # USER INPUIT
+    input_id = db.relationship('Input', backref='period', lazy='dynamic')
 
 
 # def autoregister_users(file_path):

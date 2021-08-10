@@ -9,7 +9,17 @@ from app import db
 from app.auth.routes import admin_required
 from app.models import User, Team, Game
 from app.main import bp
-from app.main.forms import TeamAssign, UserForm, GameAssignForm, GameCreateForm, GamePlayForm
+from app.main.forms import TeamAssign, UserForm, GameAssignForm, GameCreateForm, GamePlayForm, GameUserForm
+
+
+def current_team():
+    current_team_ = Team.query.filter_by(id=current_user.team_id).first()
+    return current_team_
+
+
+def current_game():
+    current_team_ = current_team()
+    return Game.query.filter_by(id=current_team_.game_id).first()
 
 
 @bp.route('/')
@@ -126,14 +136,8 @@ def game(game_id):
 # player
 @bp.route('/play', methods=['GET', 'POST'])
 @login_required
-def player(game_id):
-    game_ = Game.query.filter_by(id=game_id).first()
-    form = GamePlayForm(obj=game_)
-    if form.validate_on_submit():
-        if form.increase_period.data == 'increase':
-            game_.increase_current_day(10)
-        elif form.increase_period.data == 'decrease':
-            game_.decrease_current_day(10)
-        db.session.add(game_)
-        db.session.commit()
-    return render_template('game.html', form=form, game=game_)
+def play():
+    team_ = current_team()
+    game_ = current_game()
+    form = GameUserForm()
+    return render_template('play.html', form=form, team=team_, game=game_)

@@ -36,5 +36,9 @@ class GamePlayForm(FlaskForm):
     increase_period = RadioField('Label', choices=[('increase', 'Increase period'), ('decrease', 'Decrease period')])
     submit = SubmitField('Save')
 
+
 class GameUserForm(FlaskForm):
-    pass
+    activity1 = SelectField('Activity1', validators=[Optional()])
+    activity2 = SelectField('Activity2', validators=[Optional()])
+    activity3 = SelectField('Activity3', validators=[Optional()])
+    submit = SubmitField('Save')
