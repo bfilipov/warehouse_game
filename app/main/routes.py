@@ -7,7 +7,7 @@ from werkzeug.urls import url_parse
 
 from app import db
 from app.auth.routes import admin_required
-from app.models import User, Team, Game
+from app.models import Activity, Game, Team, TeamActivity, User
 from app.main import bp
 from app.main.forms import TeamAssign, UserForm, GameAssignForm, GameCreateForm, GamePlayForm, GameUserForm
 
@@ -140,4 +140,40 @@ def play():
     team_ = current_team()
     game_ = current_game()
     form = GameUserForm()
-    return render_template('play.html', form=form, team=team_, game=game_)
+
+    # Team Activities
+    to_be_started = TeamActivity.query.filter_by(team=team_.id, started_on_day=game_.current_day).all()
+    finished = _get_finished_activities(team_, game_)
+    in_progress = [ta for ta in TeamActivity.query.filter_by(team=team_.id).all()
+                   if ta.started_on_day < game_.current_day]
+
+    unavailable_activities = [a.activity_id for a in finished + in_progress + to_be_started]
+
+    available_activities = [(None, '-')] + [(a.id, a.title) for a in Activity.query.all()
+                                            if a.id not in unavailable_activities]
+    form.activity.choices = available_activities
+
+    remove = []
+    for ta in to_be_started:
+        a = Activity.query.filter_by(id=ta.activity_id).first()
+        remove.append(a)
+
+    form.remove_activity.choices = [(a.id, a.title) for a in remove]
+
+    if (form.validate_on_submit()
+            and form.activity.data != 'None'
+            and form.activity.data not in unavailable_activities):
+        activity = TeamActivity(activity_id=form.activity.data, team=team_.id, started_on_day=game_.current_day)
+        db.session.add(activity)
+        db.session.commit()
+    return render_template('play.html', form=form, team=team_, game=game_,
+                           started=to_be_started, finished=finished, in_progress=in_progress)
+
+
+def _get_finished_activities(team_, game_):
+    result = []
+    for ta in TeamActivity.query.filter_by(team=team_.id).all():
+        activity = Activity.query.filter_by(id=ta.activity_id).first()
+        if game_.current_day - ta.started_on_day >= activity.days_needed:
+            result.append(ta)
+    return result

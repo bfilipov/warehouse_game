@@ -38,7 +38,6 @@ class GamePlayForm(FlaskForm):
 
 
 class GameUserForm(FlaskForm):
-    activity1 = SelectField('Activity1', validators=[Optional()])
-    activity2 = SelectField('Activity2', validators=[Optional()])
-    activity3 = SelectField('Activity3', validators=[Optional()])
+    activity = SelectField('Add activity', validators=[Optional()])
+    remove_activity = SelectField('Remove activity', validators=[Optional()])
     submit = SubmitField('Save')
