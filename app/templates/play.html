@@ -4,20 +4,21 @@
 
     <h2>Current day: {{game.current_day}}</h2>
     <h2>Credit:</h2>
+    <h3>Credit to be taken current round:{{credit_to_take}}</h3>
 
     <h3>Activities finished:</h3>
     {% for a in finished %}
-        <h4>{{a}}</h4>
+        <h4>{{a.title}}</h4>
     {% endfor %}
 
     <h3>Activities in progress:</h3>
     {% for a in in_progres %}
-        <h4>{{a}}</h4>
+        <h4>{{a.title}}</h4>
     {% endfor %}
 
     <h3>Activities to be started:</h3>
     {% for a in started %}
-        <h4>{{a}}</h4>
+        <h4>{{a.title}}</h4>
     {% endfor %}
 
     <div class="row">

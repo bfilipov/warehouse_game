@@ -60,35 +60,6 @@ def register():
         return redirect(url_for('auth.register'))
     return render_template('auth/register.html', title=_('Register'),
                            form=form)
-#
-# @bp.route('/admin/register', methods=['GET', 'POST'])
-# @login_required
-# @admin_required
-# def register():
-#     form = RegistrationForm()
-#     if form.validate_on_submit():
-#         user = User(username=form.username.data, email=form.email.data)
-#
-#         user.display_name = form.display_name.data
-#
-#         user.member1 = form.member1.data
-#         user.member2 = form.member2.data
-#         user.member3 = form.member3.data
-#         user.member4 = form.member4.data
-#         user.member5 = form.member5.data
-#         user.member6 = form.member6.data
-#         user.member7 = form.member7.data
-#         user.member8 = form.member8.data
-#         user.member9 = form.member9.data
-#         user.member10 = form.member10.data
-#
-#         user.set_password(form.password.data)
-#         db.session.add(user)
-#         db.session.commit()
-#
-#         flash(f'Registered new user: {user}')
-#         return redirect(url_for('auth.register'))
-#     return render_template('auth/register.html', title='Register', form=form)
 
 
 @bp.route('/reset_password_request', methods=['GET', 'POST'])

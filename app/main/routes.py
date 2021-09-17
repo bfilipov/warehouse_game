@@ -7,9 +7,42 @@ from werkzeug.urls import url_parse
 
 from app import db
 from app.auth.routes import admin_required
-from app.models import Activity, Game, Team, TeamActivity, User
+from app.models import Activity, Game, Team, TeamActivity, User, Input
 from app.main import bp
 from app.main.forms import TeamAssign, UserForm, GameAssignForm, GameCreateForm, GamePlayForm, GameUserForm
+
+INTEREST_RATE_PER_MONTH = 0.042
+RENT_PER_MONTH = 900
+
+
+def _commit_object_to_db(model, **kwargs):
+    object_ = model(**kwargs)
+    db.session.add(object_)
+    db.session.commit()
+    return object_
+
+
+def get_or_create(session, model, **kwargs):
+    """
+    session, model, **kwargs
+    """
+    instance = session.query(model).filter_by(**kwargs).first()
+    if instance:
+        return instance
+    else:
+        instance = model(**kwargs)
+        session.add(instance)
+        session.commit()
+        return instance
+
+
+def _delete_object_from_db(model, **kwargs):
+    object_ = model.query.filter_by(**kwargs).first()
+    if not object_:
+        raise ValueError(f'Object not found, {kwargs}')
+    db.session.delete(object_)
+    db.session.commit()
+    return object_
 
 
 def current_team():
@@ -110,7 +143,9 @@ def game_edit(game_id):
     if form.validate_on_submit():
         added_team = Team.query.filter_by(id=form.team.data).first()
         game_.teams.append(added_team)
+        initial_team_input = Input(id=f'{team.id}_{game_.current_day}', team_id=team.id, active_at_day=game_.current_day)
         db.session.add(game_)
+        db.session.add(initial_team_input)
         db.session.commit()
         flash(f'Successfully added team.')
         return redirect(url_for('main.game', game_id=game_.id))
@@ -125,6 +160,7 @@ def game(game_id):
     form = GamePlayForm(obj=game_)
     if form.validate_on_submit():
         if form.increase_period.data == 'increase':
+            _calculate_next_period(game_)
             game_.increase_current_day(10)
         elif form.increase_period.data == 'decrease':
             game_.decrease_current_day(10)
@@ -133,41 +169,96 @@ def game(game_id):
     return render_template('game.html', form=form, game=game_)
 
 
+def _calculate_next_period(game_):
+    for team_ in game_.teams:
+        current_period_input = get_or_create(db.session, Input, id=f'{team_.id}_{game_.current_day}',
+                                             team_id=team_.id, active_at_day=game_.current_day)
+        import pdb;
+        pdb.set_trace()
+        for act in current_period_input.activities:
+            pass
+
+
 # player
 @bp.route('/play', methods=['GET', 'POST'])
 @login_required
 def play():
+    user_ = current_user
     team_ = current_team()
     game_ = current_game()
     form = GameUserForm()
+    input_ = get_or_create(db.session, Input, id=f'{team_.id}_{game_.current_day}',
+                           team_id=team_.id, active_at_day=game_.current_day)
 
-    # Team Activities
+    _none_option = [('none_of_the_above', '-')]
+    all_activities = Activity.query.all()
+    activities_to_dict = {k: v for k, v in [(a.id, a.title) for a in all_activities]}
+    activities_object_map = {k: v for k, v in [(a.id, a) for a in all_activities]}
+
     to_be_started = TeamActivity.query.filter_by(team=team_.id, started_on_day=game_.current_day).all()
     finished = _get_finished_activities(team_, game_)
     in_progress = [ta for ta in TeamActivity.query.filter_by(team=team_.id).all()
                    if ta.started_on_day < game_.current_day]
 
     unavailable_activities = [a.activity_id for a in finished + in_progress + to_be_started]
+    available_activities = _none_option + [(a.id, a.title) for a in Activity.query.all()
+                                           if a.id not in unavailable_activities]
+    form.add_activity.choices = available_activities
+    form.remove_activity.choices = _none_option + [(a.id, activities_to_dict[a.activity_id])
+                                                   for a in to_be_started]
 
-    available_activities = [(None, '-')] + [(a.id, a.title) for a in Activity.query.all()
-                                            if a.id not in unavailable_activities]
-    form.activity.choices = available_activities
+    if not (user_.is_cashier or user_.is_manager):
+        del form.add_activity
+        del form.remove_activity
+        del form.apply_for_credit
+        del form.submit
 
-    remove = []
-    for ta in to_be_started:
-        a = Activity.query.filter_by(id=ta.activity_id).first()
-        remove.append(a)
+    if form.validate_on_submit():
+        redirect_ = redirect(url_for('main.play', form=form, team=team_, game=game_,
+                                     started=to_be_started, finished=finished, in_progress=in_progress))
 
-    form.remove_activity.choices = [(a.id, a.title) for a in remove]
+        credit = form.apply_for_credit.data
+        if not validate_and_update_credit(credit, input_):
+            return redirect_
 
-    if (form.validate_on_submit()
-            and form.activity.data != 'None'
-            and form.activity.data not in unavailable_activities):
-        activity = TeamActivity(activity_id=form.activity.data, team=team_.id, started_on_day=game_.current_day)
-        db.session.add(activity)
-        db.session.commit()
+        if (form.add_activity.data != 'none_of_the_above'
+                and form.add_activity.data not in unavailable_activities):
+            to_add = _commit_object_to_db(TeamActivity, activity_id=form.add_activity.data,
+                                          team=team_.id,
+                                          input_id=f'{team_.id}_{game_.current_day}',
+                                          initiated_on_day=game_.current_day)
+            flash(f'{activities_to_dict[to_add.activity_id]} added')
+            if not form.remove_activity.data != 'none_of_the_above':
+                return redirect_
+        if form.remove_activity.data != 'none_of_the_above':
+            to_remove = _delete_object_from_db(TeamActivity, id=form.remove_activity.data)
+            flash(f'{activities_to_dict[to_remove.activity_id]} removed')
+            return redirect_
+
     return render_template('play.html', form=form, team=team_, game=game_,
-                           started=to_be_started, finished=finished, in_progress=in_progress)
+                           credit_to_take=input_.credit,
+                           started=[activities_object_map[a.activity_id] for a in to_be_started],
+                           finished=[activities_object_map[a.activity_id] for a in finished],
+                           in_progress=[activities_object_map[a.activity_id] for a in in_progress])
+
+
+def validate_and_update_credit(credit, input_):
+    if not credit:
+        return True
+
+    if credit > 0:
+        if not credit % 300 == 0:
+            flash(f'Credit should be increment of 300')
+            return False
+        if credit > 10000:
+            flash(f'Maximum size of credit is 9900')
+            return False
+
+    input_.credit = credit
+    db.session.add(input_)
+    db.session.commit()
+    return True
+
 
 
 def _get_finished_activities(team_, game_):

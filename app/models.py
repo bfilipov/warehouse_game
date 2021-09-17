@@ -10,6 +10,8 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from app import db
 from app import login
 
+INITAL_CREDIT_AMOUNT = 2000
+
 
 class BaseModel(db.Model):
     __abstract__ = True
@@ -96,12 +98,18 @@ class Settings(BaseModel):
 
 
 class Input(BaseModel):
+    # id in format: 'team_id'_'current_day'
     id = db.Column(db.String(64), primary_key=True, index=True)
-    credit = db.Column(db.Integer, default=0)
-    # activities = db.relationship('Activity', backref='input', lazy='dynamic')
-    activity = db.Column(db.String(64))
     team_id = db.Column(db.Integer, db.ForeignKey('team.id'))
-    period_id = db.Column(db.String(64), db.ForeignKey('period.id'))
+
+    credit_taken = db.Column(db.Integer, default=0)
+    credit_to_take = db.Column(db.Integer, default=0)
+    activities = db.relationship('TeamActivity', backref='input', lazy='dynamic')
+
+    # period_id = db.Column(db.String(64), db.ForeignKey('period.id'))
+    active_at_day = db.Column(db.Integer)
+    money_at_start_of_period = db.Column(db.Float)
+    money_at_end_of_period = db.Column(db.Float)
     approved_by_admin = db.Column(db.Boolean, default=False)
 
 
@@ -113,21 +121,23 @@ class Activity(BaseModel):
     cost = db.Column(db.Integer, default=100)
 
 
+class TeamActivity(BaseModel):
+    team = db.Column(db.Integer, db.ForeignKey('team.id'))
+    activity_id = db.Column(db.String(64), db.ForeignKey('activity.id', ondelete="cascade"))
+    input_id = db.Column(db.String(64), db.ForeignKey('input.id', ondelete="cascade"))
+    started_on_day = db.Column(db.Integer, default=False)
+    initiated_on_day = db.Column(db.Integer, default=False)
+
+
 class ActivityRequirement(BaseModel):
     # id = db.Column(db.Integer , primary_key=True , autoincrement=True)
     activity_id = db.Column(db.String(64), db.ForeignKey('activity.id', ondelete="cascade"))
     requirement_id = db.Column(db.String(64), db.ForeignKey('activity.id', ondelete="cascade"))
 
 
-class TeamActivity(BaseModel):
-    team = db.Column(db.Integer, db.ForeignKey('team.id'))
-    activity_id = db.Column(db.String(64), db.ForeignKey('activity.id', ondelete="cascade"))
-    started_on_day = db.Column(db.Integer, default=False)
-
-
-class Period(BaseModel):
-    id = db.Column(db.String(64), primary_key=True, index=True)
-    game_id = db.Column(db.Integer, db.ForeignKey('game.id'))
-    team_id = db.Column(db.Integer, db.ForeignKey('team.id'))
-    period_number = db.Column(db.Integer)
-    input_id = db.relationship('Input', backref='period', lazy='dynamic')
+# class Period(BaseModel):
+#     id = db.Column(db.String(64), primary_key=True, index=True)
+#     game_id = db.Column(db.Integer, db.ForeignKey('game.id'))
+#     team_id = db.Column(db.Integer, db.ForeignKey('team.id'))
+#     period_number = db.Column(db.Integer)
+#     input_id = db.relationship('Input', backref='period', lazy='dynamic')
