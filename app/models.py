@@ -108,8 +108,8 @@ class Input(BaseModel):
 
     # period_id = db.Column(db.String(64), db.ForeignKey('period.id'))
     active_at_day = db.Column(db.Integer)
-    money_at_start_of_period = db.Column(db.Float)
-    money_at_end_of_period = db.Column(db.Float)
+    money_at_start_of_period = db.Column(db.Float, default=0)
+    money_at_end_of_period = db.Column(db.Float, default=0)
     approved_by_admin = db.Column(db.Boolean, default=False)
 
 
@@ -125,8 +125,9 @@ class TeamActivity(BaseModel):
     team = db.Column(db.Integer, db.ForeignKey('team.id'))
     activity_id = db.Column(db.String(64), db.ForeignKey('activity.id', ondelete="cascade"))
     input_id = db.Column(db.String(64), db.ForeignKey('input.id', ondelete="cascade"))
-    started_on_day = db.Column(db.Integer, default=False)
-    initiated_on_day = db.Column(db.Integer, default=False)
+    started_on_day = db.Column(db.Integer, default=0)
+    initiated_on_day = db.Column(db.Integer, default=0)
+    penalty_from_previous_period = db.Column(db.Integer, default=0)
 
 
 class ActivityRequirement(BaseModel):

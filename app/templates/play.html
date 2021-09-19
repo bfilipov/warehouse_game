@@ -2,22 +2,26 @@
 {% import 'bootstrap/wtf.html' as wtf %}
 {% block app_content %}
 
-    <h2>Current day: {{game.current_day}}</h2>
-    <h2>Credit:</h2>
-    <h3>Credit to be taken current round:{{credit_to_take}}</h3>
+    <h2>Current day: {{state['game'].current_day}}</h2>
+
+    <h2>Available funds: {{state['money_at_start_of_period']}}</h2>
+
+    <h2>Credit: {{state['credit_taken']}}</h2>
+
+    <h3>Credit to be taken current round:{{state['credit_to_take']}}</h3>
 
     <h3>Activities finished:</h3>
-    {% for a in finished %}
+    {% for a in state['finished'] %}
         <h4>{{a.title}}</h4>
     {% endfor %}
 
     <h3>Activities in progress:</h3>
-    {% for a in in_progres %}
-        <h4>{{a.title}}</h4>
+    {% for a in state['in_progress'] %}
+        <h4>{{a.title}} - started on day {{a.started_on_day}}</h4>
     {% endfor %}
 
     <h3>Activities to be started:</h3>
-    {% for a in started %}
+    {% for a in state['started'] %}
         <h4>{{a.title}}</h4>
     {% endfor %}
 

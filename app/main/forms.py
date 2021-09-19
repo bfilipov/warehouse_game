@@ -8,7 +8,8 @@ from app.models import User
 
 class TeamAssign(FlaskForm):
     is_active = BooleanField('Is Active?', validators=[])
-    user = SelectField('Player', validators=[Optional()])
+    add_user = SelectField('Add player', validators=[Optional()])
+    remove_user = SelectField('Remove player', validators=[Optional()])
     submit = SubmitField('Save')
 
 
@@ -21,6 +22,11 @@ class UserForm(FlaskForm):
     faculty_number = StringField('faculty_number', validators=[DataRequired()])
     team_id = SelectField('Team', validators=[DataRequired()])
     submit = SubmitField('Save')
+
+
+class TeamForm(FlaskForm):
+    display_name = StringField('Add new team', validators=[DataRequired()])
+    submit = SubmitField('Add')
 
 
 class GameAssignForm(FlaskForm):
