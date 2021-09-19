@@ -12,17 +12,17 @@
 
     <h3>Activities finished:</h3>
     {% for a in state['finished'] %}
-        <h4>{{a.title}}</h4>
+        <h4>{{state['activities_object_map'][a.activity_id].title}} - finished on day {{a.finished_on_day}}</h4>
     {% endfor %}
 
     <h3>Activities in progress:</h3>
     {% for a in state['in_progress'] %}
-        <h4>{{a.title}} - started on day {{a.started_on_day}}</h4>
+        <h4>{{state['activities_object_map'][a.activity_id].title}} - started on day {{a.started_on_day}}</h4>
     {% endfor %}
 
     <h3>Activities to be started:</h3>
     {% for a in state['started'] %}
-        <h4>{{a.title}}</h4>
+        <h4>{{state['activities_object_map'][a.activity_id].title}}</h4>
     {% endfor %}
 
     <div class="row">

@@ -7,7 +7,7 @@ from werkzeug.urls import url_parse
 
 from app import db
 from app.auth.routes import admin_required
-from app.models import Activity, Game, Team, TeamActivity, User, Input
+from app.models import Activity, ActivityRequirement, Game, Team, TeamActivity, User, Input
 from app.main import bp
 from app.main.forms import TeamAssign, UserForm, GameAssignForm, GameCreateForm, GamePlayForm, GameUserForm, TeamForm
 
@@ -167,7 +167,8 @@ def game_edit(game_id):
     if form.validate_on_submit():
         added_team = Team.query.filter_by(id=form.team.data).first()
         game_.teams.append(added_team)
-        initial_team_input = Input(id=f'{team.id}_{game_.current_day}', team_id=team.id, active_at_day=game_.current_day)
+        initial_team_input = Input(id=f'{game_.id}_{added_team.id}_{game_.current_day}', game_id=game_.id,
+                                   team_id=added_team.id, active_at_day=game_.current_day)
         db.session.add(game_)
         db.session.add(initial_team_input)
         db.session.commit()
@@ -198,16 +199,18 @@ def game(game_id):
 
 def get_current_period_input(team_, game_):
     current_period_input = get_or_create(db.session, Input,
-                                         id=f'{team_.id}_{game_.current_day}',
+                                         id=f'{game_.id}_{team_.id}_{game_.current_day}',
                                          team_id=team_.id,
+                                         game_id=game_.id,
                                          active_at_day=game_.current_day)
     if game_.current_day == 1:
         current_period_input.credit_taken = STARTING_FUNDS
         current_period_input.money_at_start_of_period = STARTING_FUNDS
     else:
         previous_period_input = get_or_create(db.session, Input,
-                                              id=f'{team_.id}_{game_.current_day-PERIOD_INCREMENT_IN_DAYS}',
+                                              id=f'{game_.id}_{team_.id}_{game_.current_day-PERIOD_INCREMENT_IN_DAYS}',
                                               team_id=team_.id,
+                                              game_id=game_.id,
                                               active_at_day=game_.current_day-PERIOD_INCREMENT_IN_DAYS)
         current_period_input.credit_taken = previous_period_input.credit_taken + previous_period_input.credit_to_take
         current_period_input.money_at_start_of_period = (previous_period_input.money_at_end_of_period
@@ -222,21 +225,39 @@ def _calculate_next_period(game_):
 
         next_period_day = game_.current_day + PERIOD_INCREMENT_IN_DAYS
         next_period_input = get_or_create(db.session, Input,
-                                          id=f'{team_.id}_{next_period_day}',
+                                          id=f'{game_.id}_{team_.id}_{next_period_day}',
                                           team_id=team_.id,
+                                          game_id=game_.id,
                                           active_at_day=next_period_day)
         penalty = 0
-        available_money = current_period_input.money_at_start_of_period or 0
+        available_money = current_period_input.money_at_start_of_period
         for team_act in current_period_input.activities:
             act = Activity.query.filter_by(id=team_act.activity_id).first()
-            if act.cost <= available_money:
-                team_act.penalty_from_previous_period = 0
-                team_act.started_on_day = game_.current_day
+            if is_activity_eligible(act, team_act, available_money, team_, game_):
                 available_money -= act.cost
             else:
                 # if no funds available for current round, move activity for next round
                 team_act.input_id = next_period_input.id
                 team_act.penalty_from_previous_period = NOT_ENOUGH_FUNDS_PENALTY
+
+        current_period_input.money_at_end_of_period = available_money + current_period_input.credit_to_take
+        db.session.add(current_period_input)
+        db.session.commit()
+
+
+def is_activity_eligible(act, team_act, available_money, team_, game_):
+    required_acts = ActivityRequirement.query.filter_by(activity_id=act.id).all()
+    finished_acts = [ta.activity_id for ta in _get_finished_activities(team_, game_)]
+    for a in required_acts:
+        if a.requirement_id not in finished_acts:
+            return False
+    if act.cost >= available_money:
+        return False
+
+    team_act.penalty_from_previous_period = 0
+    team_act.started_on_day = game_.current_day
+    team_act.finished_on_day = game_.current_day + act.days_needed
+    return True
 
 
 # player
@@ -245,19 +266,24 @@ def _calculate_next_period(game_):
 def play():
     state = {}
     user_ = current_user
-    team_ = current_team()
-    game_ = current_game()
+    try:
+        team_ = current_team()
+        game_ = current_game()
+    except AttributeError as e:
+        flash('Not yet started')
+        return redirect('/')
+
     form = GameUserForm()
     input_ = get_current_period_input(team_, game_)
 
     all_activities = Activity.query.all()
     activities_to_dict = {k: v for k, v in [(a.id, f'{a.title} Ценa:{a.cost}') for a in all_activities]}
-    activities_object_map = {k: v for k, v in [(a.id, a) for a in all_activities]}
+    state['activities_object_map'] = {k: v for k, v in [(a.id, a) for a in all_activities]}
 
-    to_be_started = TeamActivity.query.filter_by(team=team_.id, started_on_day=MAX_DAY).all()
+    to_be_started = TeamActivity.query.filter_by(game=game_.id, team=team_.id, started_on_day=MAX_DAY).all()
     finished = _get_finished_activities(team_, game_)
-    in_progress = [ta for ta in TeamActivity.query.filter_by(team=team_.id).all()
-                   if ta.started_on_day < game_.current_day]
+    in_progress = [ta for ta in TeamActivity.query.filter_by(game=game_.id, team=team_.id).all()
+                   if ta.started_on_day < game_.current_day and ta not in finished]
 
     unavailable_activities = [a.activity_id for a in finished + in_progress + to_be_started]
     available_activities = NONE_OPTION + [(a.id, f'{a.title} Ценa:{a.cost}') for a in Activity.query.all()
@@ -275,8 +301,9 @@ def play():
     state['team'] = team_
     state['game'] = game_
     state['money_at_start_of_period'] = input_.money_at_start_of_period
+    state['credit_taken'] = input_.credit_taken
     state['started'] = to_be_started
-    state['finished'] = finished
+    state['finished'] = sorted(finished, key=lambda ta: ta.finished_on_day)
     state['in_progress'] = in_progress
 
     if form.validate_on_submit():
@@ -292,9 +319,11 @@ def play():
                 and form.add_activity.data not in unavailable_activities):
             to_add = _commit_object_to_db(TeamActivity, activity_id=form.add_activity.data,
                                           team=team_.id,
+                                          game=game_.id,
                                           started_on_day=MAX_DAY,
+                                          finished_on_day=MAX_DAY,
                                           initiated_on_day=game_.current_day,
-                                          input_id=f'{team_.id}_{game_.current_day}')
+                                          input_id=f'{game_.id}_{team_.id}_{game_.current_day}')
             flash(f'{activities_to_dict[to_add.activity_id]} added')
             if not form.remove_activity.data != 'none_of_the_above':
                 return redirect_
@@ -305,9 +334,9 @@ def play():
             return redirect_
 
     state['credit_to_take'] = input_.credit_to_take
-    state['started'] = [activities_object_map[a.activity_id] for a in to_be_started]
-    state['finished'] = [activities_object_map[a.activity_id] for a in finished]
-    state['in_progress'] = [activities_object_map[a.activity_id] for a in in_progress]
+    state['started'] = to_be_started
+    state['finished'] = sorted(finished, key=lambda ta: ta.finished_on_day)
+    state['in_progress'] = in_progress
 
     return render_template('play.html', form=form, state=state)
 
@@ -332,8 +361,7 @@ def validate_and_update_credit(credit, input_):
 
 def _get_finished_activities(team_, game_):
     result = []
-    for ta in TeamActivity.query.filter_by(team=team_.id).all():
-        activity = Activity.query.filter_by(id=ta.activity_id).first()
-        if game_.current_day - ta.started_on_day >= activity.days_needed:
+    for ta in TeamActivity.query.filter_by(team=team_.id, game=game_.id).all():
+        if game_.current_day >= ta.finished_on_day:
             result.append(ta)
     return result

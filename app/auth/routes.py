@@ -16,7 +16,7 @@ from app.auth.email import send_password_reset_email
 def admin_required(func):
     @wraps(func)
     def decorated_view(*args, **kwargs):
-        if not current_user.is_admin:
+        if not current_user or not current_user.is_admin:
             return current_app.login_manager.unauthorized()
         return func(*args, **kwargs)
     return decorated_view
@@ -46,7 +46,9 @@ def logout():
     return redirect(url_for('main.index'))
 
 
-@bp.route('/register', methods=['GET', 'POST'])
+@bp.route('register', methods=['GET', 'POST'])
+@login_required
+@admin_required
 def register():
     form = RegistrationForm()
     if form.validate_on_submit():
@@ -62,6 +64,7 @@ def register():
                            form=form)
 
 
+@admin_required
 @bp.route('/reset_password_request', methods=['GET', 'POST'])
 def reset_password_request():
     if current_user.is_authenticated:

@@ -101,6 +101,7 @@ class Input(BaseModel):
     # id in format: 'team_id'_'current_day'
     id = db.Column(db.String(64), primary_key=True, index=True)
     team_id = db.Column(db.Integer, db.ForeignKey('team.id'))
+    game_id = db.Column(db.Integer, db.ForeignKey('game.id'))
 
     credit_taken = db.Column(db.Integer, default=0)
     credit_to_take = db.Column(db.Integer, default=0)
@@ -123,9 +124,11 @@ class Activity(BaseModel):
 
 class TeamActivity(BaseModel):
     team = db.Column(db.Integer, db.ForeignKey('team.id'))
+    game = db.Column(db.Integer, db.ForeignKey('game.id'))
     activity_id = db.Column(db.String(64), db.ForeignKey('activity.id', ondelete="cascade"))
     input_id = db.Column(db.String(64), db.ForeignKey('input.id', ondelete="cascade"))
     started_on_day = db.Column(db.Integer, default=0)
+    finished_on_day = db.Column(db.Integer, default=0)
     initiated_on_day = db.Column(db.Integer, default=0)
     penalty_from_previous_period = db.Column(db.Integer, default=0)
 

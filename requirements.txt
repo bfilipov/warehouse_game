@@ -13,3 +13,4 @@ psycopg2==2.8.6
 SQLAlchemy==1.4.17
 Werkzeug==2.0.1
 WTForms==2.3.3
+pytest==6.2.5
