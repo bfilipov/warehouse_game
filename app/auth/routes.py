@@ -64,8 +64,8 @@ def register():
                            form=form)
 
 
-@admin_required
 @bp.route('/reset_password_request', methods=['GET', 'POST'])
+@admin_required
 def reset_password_request():
     if current_user.is_authenticated:
         return redirect(url_for('main.index'))
