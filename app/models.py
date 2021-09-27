@@ -25,6 +25,7 @@ class BaseModel(db.Model):
 class User(UserMixin, BaseModel):
     is_active = db.Column(db.Boolean, default=True)
     is_admin = db.Column(db.Boolean, default=False)
+    is_superadmin = db.Column(db.Boolean, default=False)
     is_manager = db.Column(db.Boolean, default=False)
     is_cashier = db.Column(db.Boolean, default=False)
     username = db.Column(db.String(64), index=True, unique=True)
@@ -123,6 +124,7 @@ class Activity(BaseModel):
 
 
 class TeamActivity(BaseModel):
+    id = db.Column(db.String(64), primary_key=True, index=True)
     team = db.Column(db.Integer, db.ForeignKey('team.id'))
     game = db.Column(db.Integer, db.ForeignKey('game.id'))
     activity_id = db.Column(db.String(64), db.ForeignKey('activity.id', ondelete="cascade"))

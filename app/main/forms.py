@@ -30,8 +30,9 @@ class TeamForm(FlaskForm):
 
 
 class GameAssignForm(FlaskForm):
-    team = SelectField('Add Team', validators=[DataRequired()])
-    submit = SubmitField('Add')
+    add_team = SelectField('Add Team', validators=[DataRequired()])
+    remove_team = SelectField('Remove Team', validators=[DataRequired()])
+    submit = SubmitField('Save')
 
 
 class GameCreateForm(FlaskForm):
