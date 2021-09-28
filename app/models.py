@@ -72,7 +72,7 @@ class User(UserMixin, BaseModel):
 
 
 class Team(BaseModel):
-    input = db.relationship('Input', backref='team', lazy='dynamic')
+    inputs = db.relationship('Input', backref='team', lazy='dynamic')
     display_name = db.Column(db.String(64))
     is_active = db.Column(db.Boolean, default=True)
     users = db.relationship('User', backref='team', lazy='dynamic')
@@ -115,6 +115,15 @@ class Input(BaseModel):
     approved_by_admin = db.Column(db.Boolean, default=False)
 
 
+class InputHistory(BaseModel):
+    team_id = db.Column(db.Integer, db.ForeignKey('team.id'))
+    game_id = db.Column(db.Integer, db.ForeignKey('game.id'))
+    current_day = db.Column(db.Integer, default=0)
+    activity_to_add = db.Column(db.String(64), db.ForeignKey('activity.id', ondelete="cascade"))
+    activity_to_remove = db.Column(db.String(64), db.ForeignKey('activity.id', ondelete="cascade"))
+    credit_to_take = db.Column(db.Integer)
+
+
 class Activity(BaseModel):
     id = db.Column(db.String(64), primary_key=True, index=True, onupdate="cascade")
     title = db.Column(db.Text())
@@ -128,7 +137,7 @@ class TeamActivity(BaseModel):
     team = db.Column(db.Integer, db.ForeignKey('team.id'))
     game = db.Column(db.Integer, db.ForeignKey('game.id'))
     activity_id = db.Column(db.String(64), db.ForeignKey('activity.id', ondelete="cascade"))
-    input_id = db.Column(db.String(64), db.ForeignKey('input.id', ondelete="cascade"))
+    input_id = db.Column(db.String(64), db.ForeignKey('input.id', ondelete="CASCADE"))
     started_on_day = db.Column(db.Integer, default=0)
     finished_on_day = db.Column(db.Integer, default=0)
     initiated_on_day = db.Column(db.Integer, default=0)

@@ -1,13 +1,13 @@
 from functools import wraps
 
-from flask import current_app, flash, redirect, render_template, request, url_for
+from flask import current_app, flash, redirect, render_template, request, url_for, make_response
 from flask_babel import _
 from flask_login import current_user, login_user, logout_user, login_required
 from werkzeug.urls import url_parse
 
 from app import db
 from app.auth.routes import admin_required
-from app.models import Activity, ActivityRequirement, Game, Team, TeamActivity, User, Input
+from app.models import Activity, ActivityRequirement, Game, Team, TeamActivity, User, Input, InputHistory
 from app.main import bp
 from app.main.forms import TeamAssign, UserForm, GameAssignForm, GameCreateForm, GamePlayForm, GameUserForm, TeamForm
 
@@ -18,6 +18,21 @@ NONE_OPTION = [('none_of_the_above', '-')]
 PERIOD_INCREMENT_IN_DAYS = 10
 NOT_ENOUGH_FUNDS_PENALTY = 60
 STARTING_FUNDS = 2100
+
+
+def no_http_cache(view):
+    @wraps(view)
+    def no_cache_view(*args, **kwargs):
+        response = make_response(view(*args, **kwargs))
+        response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0')
+        return response
+
+    return no_cache_view
+
+
+def commit_to_db(object_):
+    db.session.add(object_)
+    db.session.commit()
 
 
 def _commit_object_to_db(model, **kwargs):
@@ -181,10 +196,7 @@ def game_edit(game_id):
         if form.add_team.data not in [None, NONE_OPTION[0][0]]:
             change_object_reference_id(Team, form.add_team.data, 'game_id', game_.id)
             initial_team_input = get_or_create(Input,
-                                               id=f'{game_.id}_{form.add_team.data}_{game_.current_day}',
-                                               team_id=form.add_team.data,
-                                               game_id=game_.id,
-                                               active_at_day=game_.current_day)
+                                               id=f'{game_.id}_{form.add_team.data}_{game_.current_day}')
             db.session.add(game_)
             db.session.add(initial_team_input)
             db.session.commit()
@@ -208,13 +220,25 @@ def game(game_id):
             if game_.current_day < MAX_DAY:
                 _calculate_next_period(game_)
                 game_.increase_current_day(PERIOD_INCREMENT_IN_DAYS)
+                commit_to_db(game_)
             else:
                 flash('Max day reached.')
         elif form.increase_period.data == 'decrease':
             game_.decrease_current_day(PERIOD_INCREMENT_IN_DAYS)
-        db.session.add(game_)
-        db.session.commit()
+            commit_to_db(game_)
+            _update_team_inputs(game_)
     return render_template('game.html', form=form, game=game_)
+
+
+def _update_team_inputs(game_):
+    for team_ in game_.teams:
+        for input_ in team_.inputs:
+            if game_.current_day <= input_.active_at_day:
+                for team_act in input_.activities:
+                    db.session.delete(team_act)
+                    db.session.commit()
+                db.session.delete(input_)
+                db.session.commit()
 
 
 def get_current_period_input(team_, game_):
@@ -227,29 +251,28 @@ def get_current_period_input(team_, game_):
         current_period_input.credit_taken = STARTING_FUNDS
         current_period_input.money_at_start_of_period = STARTING_FUNDS
     else:
-        previous_period_input = get_or_create(Input,
-                                              id=f'{game_.id}_{team_.id}_{game_.current_day-PERIOD_INCREMENT_IN_DAYS}',
-                                              team_id=team_.id,
-                                              game_id=game_.id,
-                                              active_at_day=game_.current_day-PERIOD_INCREMENT_IN_DAYS)
-        current_period_input.credit_taken = previous_period_input.credit_taken + previous_period_input.credit_to_take
-        current_period_input.money_at_start_of_period = (previous_period_input.money_at_end_of_period
-                                                         + previous_period_input.credit_to_take)
+        previous_period = get_or_create(Input,
+                                        id=f'{game_.id}_{team_.id}_{game_.current_day-PERIOD_INCREMENT_IN_DAYS}',
+                                        team_id=team_.id,
+                                        game_id=game_.id,
+                                        active_at_day=game_.current_day-PERIOD_INCREMENT_IN_DAYS)
+        current_period_input.credit_taken = previous_period.credit_taken + previous_period.credit_to_take
+        current_period_input.money_at_start_of_period = previous_period.money_at_end_of_period
+        commit_to_db(current_period_input)
+
     return current_period_input
 
 
 def _calculate_next_period(game_):
     for team_ in game_.teams:
-
         current_period_input = get_current_period_input(team_, game_)
-
         next_period_day = game_.current_day + PERIOD_INCREMENT_IN_DAYS
         next_period_input = get_or_create(Input,
                                           id=f'{game_.id}_{team_.id}_{next_period_day}',
                                           team_id=team_.id,
                                           game_id=game_.id,
                                           active_at_day=next_period_day)
-        penalty = 0
+
         available_money = current_period_input.money_at_start_of_period
         for team_act in current_period_input.activities:
             act = Activity.query.filter_by(id=team_act.activity_id).first()
@@ -258,11 +281,18 @@ def _calculate_next_period(game_):
             else:
                 # if no funds available for current round, move activity for next round
                 team_act.input_id = next_period_input.id
-                team_act.penalty_from_previous_period = NOT_ENOUGH_FUNDS_PENALTY
+                # # should we activate team_activity from previous period for next period?
+                team_act.initiated_on_day = next_period_input.active_at_day
 
-        current_period_input.money_at_end_of_period = available_money + current_period_input.credit_to_take
-        db.session.add(current_period_input)
-        db.session.commit()
+        _update_funds_for_current_and_next_period(current_period_input, next_period_input, available_money)
+
+
+def _update_funds_for_current_and_next_period(current_period_input, next_period_input, available_money):
+    current_period_input.money_at_end_of_period = available_money + current_period_input.credit_to_take
+    commit_to_db(current_period_input)
+    next_period_input.money_at_start_of_period = current_period_input.money_at_end_of_period
+    next_period_input.credit_taken = current_period_input.credit_taken + current_period_input.credit_to_take
+    commit_to_db(next_period_input)
 
 
 def start_if_is_activity_eligible(act, team_act, available_money, team_, game_):
@@ -271,7 +301,7 @@ def start_if_is_activity_eligible(act, team_act, available_money, team_, game_):
     for a in required_acts:
         if a.requirement_id not in finished_acts:
             return False
-    if act.cost >= available_money:
+    if act.cost > available_money:
         return False
 
     team_act.penalty_from_previous_period = 0
@@ -280,12 +310,22 @@ def start_if_is_activity_eligible(act, team_act, available_money, team_, game_):
     return True
 
 
+def get_team_activities(game_, team_):
+    to_be_started = TeamActivity.query.filter_by(game=game_.id, team=team_.id, initiated_on_day=game_.current_day).all()
+    finished = _get_finished_activities(team_, game_)
+    in_progress = []
+    for ta in TeamActivity.query.filter_by(game=game_.id, team=team_.id).all():
+        if ta.started_on_day < game_.current_day and ta not in finished:
+            in_progress.append(ta)
+    return to_be_started, in_progress, finished
+
+
 # player
-@bp.route('/play', methods=['GET', 'POST'])
+@bp.route('/play', methods=['GET'])
 @login_required
-def play():
+@no_http_cache
+def play_get():
     state = {}
-    user_ = current_user
     try:
         team_ = current_team()
         game_ = current_game()
@@ -294,17 +334,29 @@ def play():
         return redirect('/')
 
     form = GameUserForm()
+    user_ = current_user
     input_ = get_current_period_input(team_, game_)
+
+    all_activities = Activity.query.all()
+    state['activities_object_map'] = {k: v for k, v in [(a.id, a) for a in all_activities]}
+
+    to_be_started, in_progress, finished = get_team_activities(game_, team_)
+    state['credit_to_take'] = input_.credit_to_take
+    state['started'] = to_be_started
+    state['finished'] = sorted(finished, key=lambda ta: ta.finished_on_day)
+    state['in_progress'] = in_progress
+
+    state['team'] = team_
+    state['game'] = game_
+    state['money_at_start_of_period'] = input_.money_at_start_of_period
+    state['credit_taken'] = input_.credit_taken
+    state['started'] = to_be_started
+    state['finished'] = sorted(finished, key=lambda ta: ta.finished_on_day)
+    state['in_progress'] = in_progress
 
     all_activities = Activity.query.all()
     activities_to_dict = {k: v for k, v in [(a.id, f'{a.title} Ценa:{a.cost}') for a in all_activities]}
     state['activities_object_map'] = {k: v for k, v in [(a.id, a) for a in all_activities]}
-
-    to_be_started = TeamActivity.query.filter_by(game=game_.id, team=team_.id, started_on_day=MAX_DAY).all() + \
-                    TeamActivity.query.filter_by(game=game_.id, team=team_.id, started_on_day=game_.current_day).all()
-    finished = _get_finished_activities(team_, game_)
-    in_progress = [ta for ta in TeamActivity.query.filter_by(game=game_.id, team=team_.id).all()
-                   if ta.started_on_day < game_.current_day and ta not in finished]
 
     unavailable_activities = [a.activity_id for a in finished + in_progress + to_be_started]
     available_activities = NONE_OPTION + [(a.id, f'{a.title} Ценa:{a.cost}') for a in Activity.query.all()
@@ -320,27 +372,55 @@ def play():
         del form.apply_for_credit
         del form.submit
 
-    state['team'] = team_
-    state['game'] = game_
-    state['money_at_start_of_period'] = input_.money_at_start_of_period
-    state['credit_taken'] = input_.credit_taken
-    state['started'] = to_be_started
-    state['finished'] = sorted(finished, key=lambda ta: ta.finished_on_day)
-    state['in_progress'] = in_progress
+    return render_template('play.html', form=form, state=state)
+
+
+@bp.route('/play', methods=['POST'])
+@login_required
+def play():
+    state = {}
+    user_ = current_user
+    try:
+        team_ = current_team()
+        game_ = current_game()
+    except AttributeError as e:
+        flash('Not yet started')
+        return redirect('/')
+
+    form = GameUserForm()
+    input_ = get_current_period_input(team_, game_)
+
+    to_be_started, in_progress, finished = get_team_activities(game_, team_)
+
+    all_activities = Activity.query.all()
+    activities_to_dict = {k: v for k, v in [(a.id, f'{a.title} Ценa:{a.cost}') for a in all_activities]}
+    state['activities_object_map'] = {k: v for k, v in [(a.id, a) for a in all_activities]}
+
+    unavailable_activities = [a.activity_id for a in finished + in_progress + to_be_started]
+    available_activities = NONE_OPTION + [(a.id, f'{a.title} Ценa:{a.cost}') for a in Activity.query.all()
+                                          if a.id not in unavailable_activities]
+
+    form.add_activity.choices = available_activities
+    form.remove_activity.choices = NONE_OPTION + [(a.id, activities_to_dict[a.activity_id])
+                                                  for a in to_be_started]
+
+    if not (user_.is_cashier or user_.is_manager):
+        del form.add_activity
+        del form.remove_activity
+        del form.apply_for_credit
+        del form.submit
 
     if form.validate_on_submit():
-        should_redirect = False
-        redirect_ = redirect(url_for('main.play', form=form, state=state))
-
+        input_history = InputHistory(team_id=team_.id, game_id=game_.id, current_day=game_.current_day,
+                                     activity_to_add=None, activity_to_remove=None, credit_to_take=0)
         # update credit
         credit_to_take = form.apply_for_credit.data
-        if not validate_and_update_credit(credit_to_take, input_):
-            should_redirect = True
+        input_history.credit_to_take = form.apply_for_credit.data
+        validate_and_update_credit(credit_to_take, input_)
 
         # add activity
         if (form.add_activity.data != NONE_OPTION[0][0]
-                and form.add_activity.data not in unavailable_activities
-                and form.add_activity.data not in [i.activity_id for i in input_.activities]):
+                and form.add_activity.data not in unavailable_activities):
             to_add = get_or_create(TeamActivity,
                                    id=f'{game_.id}_{team_.id}_{form.add_activity.data}')
             to_add.activity_id = form.add_activity.data
@@ -351,41 +431,27 @@ def play():
             to_add.initiated_on_day = game_.current_day
             to_add.input_id = f'{game_.id}_{team_.id}_{game_.current_day}'
             commit_to_db(to_add)
-
+            input_history.activity_to_add = form.add_activity.data
             flash(f'{activities_to_dict[to_add.activity_id]} added')
-            if not form.remove_activity.data != 'none_of_the_above':
-                should_redirect = True
 
         # remove activity
         if form.remove_activity.data != 'none_of_the_above':
-            to_remove = _reset_team_activity(id=form.remove_activity.data)
-            flash(f'{activities_to_dict[to_remove.activity_id]} removed')
-            should_redirect = True
+            _reset_team_activity(id_=form.remove_activity.data)
+            input_history.activity_to_remove = form.remove_activity.data.split('_')[-1]
 
-        if should_redirect:
-            return redirect_
-
-    state['credit_to_take'] = input_.credit_to_take
-    state['started'] = to_be_started
-    state['finished'] = sorted(finished, key=lambda ta: ta.finished_on_day)
-    state['in_progress'] = in_progress
-
-    return render_template('play.html', form=form, state=state)
+        commit_to_db(input_history)
+    return redirect(url_for('main.play', form=form, state=state))
+    # return render_template('play.html', form=form, state=state)
 
 
-def _reset_team_activity(id):
-    activity = TeamActivity.query.filter_by(id=id).first()
-    activity.started_on_day = None
+def _reset_team_activity(id_):
+    activity = TeamActivity.query.filter_by(id=id_).first()
+    activity.started_on_day = MAX_DAY
     activity.finished_on_day = MAX_DAY
     activity.initiated_on_day = None
     db.session.add(activity)
     db.session.commit()
     return activity
-
-
-def commit_to_db(object):
-    db.session.add(object)
-    db.session.commit()
 
 
 def validate_and_update_credit(credit, input_):
