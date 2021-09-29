@@ -7,7 +7,7 @@ from werkzeug.urls import url_parse
 
 from app import db
 from app.auth.routes import admin_required
-from app.models import Activity, ActivityRequirement, Game, Team, TeamActivity, User, Input, InputHistory
+from app.models import Activity, ActivityRequirement, Game, Team, TeamActivity, User, Input, InputHistory, Penalty
 from app.main import bp
 from app.main.forms import TeamAssign, UserForm, GameAssignForm, GameCreateForm, GamePlayForm, GameUserForm, TeamForm
 
@@ -280,15 +280,20 @@ def _calculate_next_period(game_):
                 available_money -= act.cost
             else:
                 # if no funds available for current round, move activity for next round
-                team_act.input_id = next_period_input.id
                 # # should we activate team_activity from previous period for next period?
+                team_act.input_id = next_period_input.id
                 team_act.initiated_on_day = next_period_input.active_at_day
+                commit_to_db(team_act)
+                penalty = Penalty(input_id=next_period_input.id, activity=act.id)
+                commit_to_db(penalty)
 
         _update_funds_for_current_and_next_period(current_period_input, next_period_input, available_money)
 
 
 def _update_funds_for_current_and_next_period(current_period_input, next_period_input, available_money):
-    current_period_input.money_at_end_of_period = available_money + current_period_input.credit_to_take
+    next_period_penalties = Penalty.query.filter_by(input_id=next_period_input.id).all()
+    total_penalty = sum([i.fine for i in next_period_penalties])
+    current_period_input.money_at_end_of_period = available_money + current_period_input.credit_to_take - total_penalty
     commit_to_db(current_period_input)
     next_period_input.money_at_start_of_period = current_period_input.money_at_end_of_period
     next_period_input.credit_taken = current_period_input.credit_taken + current_period_input.credit_to_take
@@ -423,14 +428,7 @@ def play():
                 and form.add_activity.data not in unavailable_activities):
             to_add = get_or_create(TeamActivity,
                                    id=f'{game_.id}_{team_.id}_{form.add_activity.data}')
-            to_add.activity_id = form.add_activity.data
-            to_add.team = team_.id
-            to_add.game = game_.id
-            to_add.started_on_day = MAX_DAY
-            to_add.finished_on_day = MAX_DAY
-            to_add.initiated_on_day = game_.current_day
-            to_add.input_id = f'{game_.id}_{team_.id}_{game_.current_day}'
-            commit_to_db(to_add)
+            _set_team_activity(to_add, form, team_, game_)
             input_history.activity_to_add = form.add_activity.data
             flash(f'{activities_to_dict[to_add.activity_id]} added')
 
@@ -444,13 +442,24 @@ def play():
     # return render_template('play.html', form=form, state=state)
 
 
+def _set_team_activity(to_add, form, team_, game_):
+    to_add.activity_id = form.add_activity.data
+    to_add.team = team_.id
+    to_add.game = game_.id
+    to_add.started_on_day = MAX_DAY
+    to_add.finished_on_day = MAX_DAY
+    to_add.initiated_on_day = game_.current_day
+    to_add.first_time_ever_initiated_on_day = game_.current_day
+    to_add.input_id = f'{game_.id}_{team_.id}_{game_.current_day}'
+    commit_to_db(to_add)
+
+
 def _reset_team_activity(id_):
     activity = TeamActivity.query.filter_by(id=id_).first()
     activity.started_on_day = MAX_DAY
     activity.finished_on_day = MAX_DAY
     activity.initiated_on_day = None
-    db.session.add(activity)
-    db.session.commit()
+    commit_to_db(activity)
     return activity
 
 
