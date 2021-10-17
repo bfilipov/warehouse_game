@@ -2,28 +2,51 @@
 {% import 'bootstrap/wtf.html' as wtf %}
 {% block app_content %}
 
-    <h2>Current day: {{state['game'].current_day}}</h2>
+    <h3>Current day: {{state['game'].current_day}}</h3>
 
-    <h2>Available funds: {{state['money_at_start_of_period']}}</h2>
+    <h3>Available funds: {{"%.2f"|format(state['money_at_start_of_period'])}}</h3>
 
-    <h2>Credit: {{state['credit_taken']}}</h2>
+    <h3>Credit total: {{state['credit_taken']}}</h3>
 
-    <h3>Credit to be taken current round:{{state['credit_to_take']}}</h3>
+    <h3>Credit to be taken for next round: {{state['credit_to_take']}}</h3>
 
+    <hr>
+
+    <h3>Current round stats:</h3>
+
+    <h4>Credit costs: {{"%.2f"|format(state['interest_cost'])}}</h4>
+
+    <h4>Penalties cost: {{state['total_penalties_cost']}}</h4>
+
+    <h4>Rent cost: {{state['rent_cost']}}</h4>
+
+    <hr>
     <h3>Activities finished:</h3>
     {% for a in state['finished'] %}
-        <h4>{{state['activities_object_map'][a.activity_id].title}} - finished on day {{a.finished_on_day}}</h4>
+        <h4>{{state['activities_object_map'][a.activity_id].title}} - finished on day {{a.finished_on_day}},
+            Cost: {{state['activities_object_map'][a.activity_id].cost}}</h4>
     {% endfor %}
 
     <h3>Activities in progress:</h3>
     {% for a in state['in_progress'] %}
-        <h4>{{state['activities_object_map'][a.activity_id].title}} - started on day {{a.started_on_day}}</h4>
+        <h4>{{state['activities_object_map'][a.activity_id].title}} - started on day {{a.started_on_day}},
+            Cost: {{state['activities_object_map'][a.activity_id].cost}}</h4>
     {% endfor %}
 
     <h3>Activities to be started:</h3>
     {% for a in state['started'] %}
-        <h4>{{state['activities_object_map'][a.activity_id].title}}</h4>
+        <h4>{{state['activities_object_map'][a.activity_id].title}}, Cost:
+            {{state['activities_object_map'][a.activity_id].cost}}</h4>
     {% endfor %}
+
+    {% if state['penalties']%}
+    <h3>Penalties on non started activities:</h3>
+        {% for p in state['penalties'] %}
+            <h4>{{state['activities_object_map'][p.activity_id].title}} - {{p.fine}}</h4>
+        {% endfor %}
+    {% endif %}
+
+    <hr>
 
     <div class="row">
         <div class="col-md-4">

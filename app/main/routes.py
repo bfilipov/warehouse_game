@@ -7,17 +7,21 @@ from werkzeug.urls import url_parse
 
 from app import db
 from app.auth.routes import admin_required
-from app.models import Activity, ActivityRequirement, Game, Team, TeamActivity, User, Input, InputHistory, Penalty
+from app.models import Activity, ActivityRequirement, Game, Team, TeamActivity, \
+    User, Input, InputHistory, Penalty
 from app.main import bp
-from app.main.forms import TeamAssign, UserForm, GameAssignForm, GameCreateForm, GamePlayForm, GameUserForm, TeamForm
+from app.main.forms import TeamAssign, UserForm, GameAssignForm, GameCreateForm, \
+    GamePlayForm, GameUserForm, TeamForm
 
 INTEREST_RATE_PER_MONTH = 0.042
 RENT_PER_MONTH = 900
 MAX_DAY = 999999999
 NONE_OPTION = [('none_of_the_above', '-')]
 PERIOD_INCREMENT_IN_DAYS = 10
+DAYS_IN_GAME_MONTH = 30
 NOT_ENOUGH_FUNDS_PENALTY = 60
 STARTING_FUNDS = 2100
+PROFIT_PER_DAY = 75
 
 
 def no_http_cache(view):
@@ -26,7 +30,6 @@ def no_http_cache(view):
         response = make_response(view(*args, **kwargs))
         response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private, max-age=0')
         return response
-
     return no_cache_view
 
 
@@ -35,7 +38,7 @@ def commit_to_db(object_):
     db.session.commit()
 
 
-def _commit_object_to_db(model, **kwargs):
+def commit_object_to_db(model, **kwargs):
     object_ = model(**kwargs)
     db.session.add(object_)
     db.session.commit()
@@ -189,10 +192,11 @@ def game_edit(game_id):
     form = GameAssignForm(obj=game_)
     unassigned_teams = Team.query.filter_by(game_id=None, is_active=True).all()
     assigned_teams = Team.query.filter_by(game_id=game_id, is_active=True).all()
-    form.add_team.choices = NONE_OPTION + [(t.id, f'Team {t.id}, {t.display_name}') for t in unassigned_teams]
-    form.remove_team.choices = NONE_OPTION + [(t.id, f'Team {t.id}, {t.display_name}') for t in assigned_teams]
+    form.add_team.choices = NONE_OPTION + [
+        (t.id, f'Team {t.id}, {t.display_name}') for t in unassigned_teams]
+    form.remove_team.choices = NONE_OPTION + [
+        (t.id, f'Team {t.id}, {t.display_name}') for t in assigned_teams]
     if form.validate_on_submit():
-
         if form.add_team.data not in [None, NONE_OPTION[0][0]]:
             change_object_reference_id(Team, form.add_team.data, 'game_id', game_.id)
             initial_team_input = get_or_create(Input,
@@ -250,20 +254,13 @@ def get_current_period_input(team_, game_):
     if game_.current_day == 1:
         current_period_input.credit_taken = STARTING_FUNDS
         current_period_input.money_at_start_of_period = STARTING_FUNDS
-    else:
-        previous_period = get_or_create(Input,
-                                        id=f'{game_.id}_{team_.id}_{game_.current_day-PERIOD_INCREMENT_IN_DAYS}',
-                                        team_id=team_.id,
-                                        game_id=game_.id,
-                                        active_at_day=game_.current_day-PERIOD_INCREMENT_IN_DAYS)
-        current_period_input.credit_taken = previous_period.credit_taken + previous_period.credit_to_take
-        current_period_input.money_at_start_of_period = previous_period.money_at_end_of_period
-        commit_to_db(current_period_input)
+    commit_to_db(current_period_input)
 
     return current_period_input
 
 
 def _calculate_next_period(game_):
+    all_activities = Activity.query.all()
     for team_ in game_.teams:
         current_period_input = get_current_period_input(team_, game_)
         next_period_day = game_.current_day + PERIOD_INCREMENT_IN_DAYS
@@ -272,6 +269,9 @@ def _calculate_next_period(game_):
                                           team_id=team_.id,
                                           game_id=game_.id,
                                           active_at_day=next_period_day)
+
+        _, _, finished = get_team_activities(game_, team_)
+        completed_all = set([i.activity_id for i in finished]) == set([i.id for i in all_activities])
 
         available_money = current_period_input.money_at_start_of_period
         for team_act in current_period_input.activities:
@@ -284,19 +284,33 @@ def _calculate_next_period(game_):
                 team_act.input_id = next_period_input.id
                 team_act.initiated_on_day = next_period_input.active_at_day
                 commit_to_db(team_act)
-                penalty = Penalty(input_id=next_period_input.id, activity=act.id)
+                penalty = Penalty(input_id=next_period_input.id, activity_id=act.id)
                 commit_to_db(penalty)
 
-        _update_funds_for_current_and_next_period(current_period_input, next_period_input, available_money)
+        _update_funds_for_current_and_next_period(current_period_input, next_period_input,
+                                                  available_money, completed_all)
 
 
-def _update_funds_for_current_and_next_period(current_period_input, next_period_input, available_money):
+def _update_funds_for_current_and_next_period(current_period_input, next_period_input,
+                                              available_money, completed_all):
+    profit = PROFIT_PER_DAY * PERIOD_INCREMENT_IN_DAYS if completed_all else 0
     next_period_penalties = Penalty.query.filter_by(input_id=next_period_input.id).all()
     total_penalty = sum([i.fine for i in next_period_penalties])
-    current_period_input.money_at_end_of_period = available_money + current_period_input.credit_to_take - total_penalty
+    next_period_input.total_penalty_cost = total_penalty
+    next_period_input.credit_taken = (current_period_input.credit_taken
+                                      + current_period_input.credit_to_take
+                                      - profit)
+    next_period_input.interest_cost = current_period_input.credit_taken * (
+            INTEREST_RATE_PER_MONTH * (PERIOD_INCREMENT_IN_DAYS / DAYS_IN_GAME_MONTH))
+    next_period_input.rent_cost = RENT_PER_MONTH if (
+            (next_period_input.active_at_day-1) % DAYS_IN_GAME_MONTH == 0) else 0
+    next_period_input.money_at_start_of_period = (available_money + current_period_input.credit_to_take
+                                                  + profit
+                                                  - next_period_input.total_penalty_cost
+                                                  - next_period_input.interest_cost
+                                                  - next_period_input.rent_cost)
+    current_period_input.money_at_end_of_period = next_period_input.money_at_start_of_period
     commit_to_db(current_period_input)
-    next_period_input.money_at_start_of_period = current_period_input.money_at_end_of_period
-    next_period_input.credit_taken = current_period_input.credit_taken + current_period_input.credit_to_take
     commit_to_db(next_period_input)
 
 
@@ -309,14 +323,14 @@ def start_if_is_activity_eligible(act, team_act, available_money, team_, game_):
     if act.cost > available_money:
         return False
 
-    team_act.penalty_from_previous_period = 0
     team_act.started_on_day = game_.current_day
     team_act.finished_on_day = game_.current_day + act.days_needed
     return True
 
 
 def get_team_activities(game_, team_):
-    to_be_started = TeamActivity.query.filter_by(game=game_.id, team=team_.id, initiated_on_day=game_.current_day).all()
+    to_be_started = TeamActivity.query.filter_by(game=game_.id, team=team_.id,
+                                                 initiated_on_day=game_.current_day).all()
     finished = _get_finished_activities(team_, game_)
     in_progress = []
     for ta in TeamActivity.query.filter_by(game=game_.id, team=team_.id).all():
@@ -346,20 +360,25 @@ def play_get():
     state['activities_object_map'] = {k: v for k, v in [(a.id, a) for a in all_activities]}
 
     to_be_started, in_progress, finished = get_team_activities(game_, team_)
-    state['credit_to_take'] = input_.credit_to_take
-    state['started'] = to_be_started
-    state['finished'] = sorted(finished, key=lambda ta: ta.finished_on_day)
-    state['in_progress'] = in_progress
 
     state['team'] = team_
     state['game'] = game_
     state['money_at_start_of_period'] = input_.money_at_start_of_period
+    state['rent_cost'] = input_.rent_cost
     state['credit_taken'] = input_.credit_taken
-    state['started'] = to_be_started
+    state['credit_to_take'] = input_.credit_to_take
+    state['interest_cost'] = input_.interest_cost
+
     state['finished'] = sorted(finished, key=lambda ta: ta.finished_on_day)
     state['in_progress'] = in_progress
+    state['started'] = to_be_started
+
+    penalties = Penalty.query.filter_by(input_id=input_.id).all()
+    state['penalties'] = penalties
+    state['total_penalties_cost'] = sum([i.fine for i in penalties])
 
     all_activities = Activity.query.all()
+
     activities_to_dict = {k: v for k, v in [(a.id, f'{a.title} Ценa:{a.cost}') for a in all_activities]}
     state['activities_object_map'] = {k: v for k, v in [(a.id, a) for a in all_activities]}
 
@@ -428,7 +447,7 @@ def play():
                 and form.add_activity.data not in unavailable_activities):
             to_add = get_or_create(TeamActivity,
                                    id=f'{game_.id}_{team_.id}_{form.add_activity.data}')
-            _set_team_activity(to_add, form, team_, game_)
+            set_team_activity(to_add, team_, game_)
             input_history.activity_to_add = form.add_activity.data
             flash(f'{activities_to_dict[to_add.activity_id]} added')
 
@@ -442,16 +461,19 @@ def play():
     # return render_template('play.html', form=form, state=state)
 
 
-def _set_team_activity(to_add, form, team_, game_):
-    to_add.activity_id = form.add_activity.data
-    to_add.team = team_.id
-    to_add.game = game_.id
-    to_add.started_on_day = MAX_DAY
-    to_add.finished_on_day = MAX_DAY
-    to_add.initiated_on_day = game_.current_day
-    to_add.first_time_ever_initiated_on_day = game_.current_day
-    to_add.input_id = f'{game_.id}_{team_.id}_{game_.current_day}'
-    commit_to_db(to_add)
+def set_team_activity(team_act, team_, game_):
+    id_splited = team_act.id.split('_')
+    activity = Activity.query.filter_by(id=id_splited[-1]).first()
+    team_act.activity_id = activity.id
+    team_act.team = id_splited[1]
+    team_act.game = id_splited[0]
+    team_act.cost = activity.cost
+    team_act.started_on_day = MAX_DAY
+    team_act.finished_on_day = MAX_DAY
+    team_act.initiated_on_day = game_.current_day
+    team_act.first_time_ever_initiated_on_day = game_.current_day
+    team_act.input_id = f'{game_.id}_{team_.id}_{game_.current_day}'
+    commit_to_db(team_act)
 
 
 def _reset_team_activity(id_):

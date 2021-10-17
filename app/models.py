@@ -107,8 +107,11 @@ class Input(BaseModel):
     credit_taken = db.Column(db.Integer, default=0)
     credit_to_take = db.Column(db.Integer, default=0)
     activities = db.relationship('TeamActivity', backref='input', lazy='dynamic')
+
     penalties = db.relationship('Penalty', backref='input', lazy='dynamic')
-    total_interest_cost = db.Column(db.Float, default=0)
+    interest_cost = db.Column(db.Float, default=0)
+    total_penalty_cost = db.Column(db.Float, default=0)
+    rent_cost = db.Column(db.Integer, default=0)
 
     # period_id = db.Column(db.String(64), db.ForeignKey('period.id'))
     active_at_day = db.Column(db.Integer)
@@ -119,7 +122,7 @@ class Input(BaseModel):
 
 class Penalty(BaseModel):
     input_id = db.Column(db.String, db.ForeignKey('input.id'))
-    activity = db.Column(db.String(64), db.ForeignKey('activity.id', ondelete="cascade"))
+    activity_id = db.Column(db.String(64), db.ForeignKey('activity.id', ondelete="cascade"))
     fine = db.Column(db.Integer, default=60)
 
 
@@ -145,12 +148,12 @@ class TeamActivity(BaseModel):
     team = db.Column(db.Integer, db.ForeignKey('team.id'))
     game = db.Column(db.Integer, db.ForeignKey('game.id'))
     activity_id = db.Column(db.String(64), db.ForeignKey('activity.id', ondelete="cascade"))
+    cost = db.Column(db.Integer, default=100)  # add penalties here?
     input_id = db.Column(db.String(64), db.ForeignKey('input.id', ondelete="CASCADE"))
     started_on_day = db.Column(db.Integer, default=0)
     finished_on_day = db.Column(db.Integer, default=0)
     initiated_on_day = db.Column(db.Integer, default=0)
     first_time_ever_initiated_on_day = db.Column(db.Integer, default=0)
-    penalty_from_previous_period = db.Column(db.Integer, default=0)
 
 
 class ActivityRequirement(BaseModel):
