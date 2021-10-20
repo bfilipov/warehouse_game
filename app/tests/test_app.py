@@ -373,34 +373,150 @@ class MainGameRoutesTest(BaseTest):
             self.assertEqual(new_period.active_at_day, start_day + routes.PERIOD_INCREMENT_IN_DAYS)
             self.assertTrue(len(penalties) == 1)
 
-    def test_play(self):
-        """Test endpoint /play """
+    def test_play_get(self):
+        """Test endpoint /play
+        get, post, increase_period"""
         with self.client:
             user = self.login_user()
-            activity1 = routes.commit_object_to_db(Activity, id='A', days_needed=20, cost=1800)
-            activity2 = routes.commit_object_to_db(Activity, id='B', days_needed=10, cost=600)
+            user.is_manager = True
+            activity1 = routes.commit_object_to_db(Activity, title='A', id='A',
+                                                   days_needed=20, cost=1800)
+            activity2 = routes.commit_object_to_db(Activity, title='B', id='B',
+                                                   days_needed=10, cost=600)
             game = routes.commit_object_to_db(Game)
             team = routes.commit_object_to_db(Team, display_name='team1', game_id=game.id)
             team.users.append(user)
             routes.commit_to_db(team)
+            routes.commit_to_db(user)
 
             input_ = routes.get_current_period_input(team, game)
-            input_.credit_to_take = 300
             routes.commit_to_db(input_)
             team_act1 = routes.commit_object_to_db(TeamActivity,
                                                    id=f'{game.id}_{team.id}_{activity1.id}',
                                                    input_id=input_.id)
-            routes.set_team_activity(team_act1, team, game)
+            # routes.set_team_activity(team_act1, team, game)
             team_act2 = routes.commit_object_to_db(TeamActivity,
                                                    id=f'{game.id}_{team.id}_{activity2.id}',
                                                    input_id=input_.id)
-            routes.set_team_activity(team_act2, team, game)
-            start_day = game.current_day
+            # routes.set_team_activity(team_act2, team, game)
 
-            # increase period through endpoint
             resp = self.client.get('/play', follow_redirects=True)
-            import pdb; pdb.set_trace()
-           self.assertEqual()
+
+            self.assertTrue(r'<h3>Current day: 1</h3>' in str(resp.data))
+            self.assertTrue(r'<h3>Available funds: 2100.00</h3>' in str(resp.data))
+            self.assertTrue(r'<h3>Credit total: 2100</h3>' in str(resp.data))
+            self.assertTrue(r'<h3>Current round stats:</h3>' in str(resp.data))
+            self.assertTrue(r'<h4>Penalties cost: 0</h4>' in str(resp.data))
+            self.assertTrue(r'<h4>Rent cost: 0</h4>' in str(resp.data))
+            self.assertTrue(r'<h4>Credit costs: 0.00</h4>' in str(resp.data))
+            self.assertTrue(r'<h3>Activities finished:</h3>' in str(resp.data))
+            self.assertTrue(r'<h3>Activities in progress:</h3>' in str(resp.data))
+            self.assertTrue(r'<h4>Credit costs: 0.00</h4>' in str(resp.data))
+
+            csrf_resp = self.get_csrf(resp)
+            resp = self.client.post('/play', data=dict(
+                csrf_token=csrf_resp,
+                add_activity=activity1.id,
+                remove_activity=routes.NONE_OPTION[0][0],
+                apply_for_credit=0,
+                submit='Save'
+            ), follow_redirects=True)
+
+            csrf_resp = self.get_csrf(resp)
+            resp = self.client.post('/play', data=dict(
+                csrf_token=csrf_resp,
+                add_activity=activity2.id,
+                remove_activity=routes.NONE_OPTION[0][0],
+                apply_for_credit=300,
+                submit='Save'
+            ), follow_redirects=True)
+
+            self.assertTrue(r'<h3>Credit to be taken for next round: 300</h3' in str(resp.data))
+            self.assertTrue(r'<h3>Activities to be started:</h3>\n    \n        '
+                            r'<h4>A, Cost:\n            1800</h4>\n    \n        '
+                            r'<h4>B, Cost:\n            600</h4>' in str(resp.data))
+
+            # try invalid credit
+            new_credit = 700
+            csrf_resp = self.get_csrf(resp)
+            resp = self.client.post('/play', data=dict(
+                csrf_token=csrf_resp,
+                add_activity=routes.NONE_OPTION[0][0],
+                remove_activity=routes.NONE_OPTION[0][0],
+                apply_for_credit=new_credit,
+                submit='Save'
+            ), follow_redirects=True)
+
+            self.assertTrue(r'<div class="alert alert-info" role="alert">'
+                            r'Credit should be increment of 300</div>' in str(resp.data))
+            self.assertTrue(r'<h3>Credit to be taken for next round: 300</h3' in str(resp.data))
+
+            # try invalid credit again
+            new_credit = 11000
+            csrf_resp = self.get_csrf(resp)
+            resp = self.client.post('/play', data=dict(
+                csrf_token=csrf_resp,
+                add_activity=routes.NONE_OPTION[0][0],
+                remove_activity=routes.NONE_OPTION[0][0],
+                apply_for_credit=new_credit,
+                submit='Save'
+            ), follow_redirects=True)
+
+            self.assertTrue(r'<div class="alert alert-info" role="alert">'
+                            r'Credit should be increment of 300</div>\n            \n'
+                            r'            <div class="alert alert-info" role="alert">'
+                            r'Maximum size of credit is 9900</div>' in str(resp.data))
+
+            new_credit = 600
+            csrf_resp = self.get_csrf(resp)
+            resp = self.client.post('/play', data=dict(
+                csrf_token=csrf_resp,
+                add_activity=routes.NONE_OPTION[0][0],
+                remove_activity=team_act2.id,
+                apply_for_credit=new_credit,
+                submit='Save'
+            ), follow_redirects=True)
+
+            self.assertTrue(rf'<h3>Credit to be taken for next round: {new_credit}</h3'
+                            in str(resp.data))
+            self.assertTrue(r'<h3>Activities to be started:</h3>\n    \n        '
+                            r'<h4>A, Cost:\n            1800</h4>' in str(resp.data))
+
+            # increase period
+            routes._calculate_next_period(game)
+            game.increase_current_day(routes.PERIOD_INCREMENT_IN_DAYS)
+            routes.commit_to_db(game)
+
+            period_increment_in_days = 10
+            days_in_game_month = 30
+            credit_costs = routes.INTEREST_RATE_PER_MONTH * routes.STARTING_FUNDS * \
+                (period_increment_in_days / days_in_game_month)
+            available_funds = routes.STARTING_FUNDS - 1800 + new_credit - credit_costs
+            resp = self.client.get('/play', follow_redirects=True)
+            self.assertTrue(r'<h4>Credit costs: {0:.2f}</h4>'.format(credit_costs)
+                            in str(resp.data))
+            self.assertTrue(r'<h3>Credit total: 2700</h3>' in str(resp.data))
+            self.assertTrue(r'<h3>Available funds: {0:.2f}</h3>'.format(available_funds)
+                            in str(resp.data))
+            self.assertTrue(r'<h3>Credit to be taken for next round: 0</h3>' in str(resp.data))
+            self.assertTrue(r'<h4>Penalties cost: 0</h4>' in str(resp.data))
+            self.assertTrue(r'<h3>Activities finished:</h3>' in str(resp.data))
+            self.assertTrue(r'<h3>Activities in progress:</h3>\n    \n        <h4>'
+                            r'A - started on day 1,\n            Cost: 1800</h4>' in str(resp.data))
+
+            # increase period
+            new_credit_costs = routes.INTEREST_RATE_PER_MONTH *\
+                2700 * period_increment_in_days / days_in_game_month
+            new_available_funds = available_funds - new_credit_costs
+            routes._calculate_next_period(game)
+            game.increase_current_day(routes.PERIOD_INCREMENT_IN_DAYS)
+            routes.commit_to_db(game)
+            resp = self.client.get('/play', follow_redirects=True)
+            self.assertTrue(r'<h4>Credit costs: {0:.2f}</h4>'.format(new_credit_costs))
+            self.assertTrue(r'<h3>Available funds: {0:.2f}</h3>'.format(new_available_funds)
+                            in str(resp.data))
+            self.assertTrue(r'<h3>Activities finished:</h3>\n    \n        <h4>'
+                            r'A - finished on day 21,\n            Cost: 1800</h4>' in str(resp.data))
 
 
 if __name__ == '__main__':

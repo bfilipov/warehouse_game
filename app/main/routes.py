@@ -428,12 +428,6 @@ def play():
     form.remove_activity.choices = NONE_OPTION + [(a.id, activities_to_dict[a.activity_id])
                                                   for a in to_be_started]
 
-    if not (user_.is_cashier or user_.is_manager):
-        del form.add_activity
-        del form.remove_activity
-        del form.apply_for_credit
-        del form.submit
-
     if form.validate_on_submit():
         input_history = InputHistory(team_id=team_.id, game_id=game_.id, current_day=game_.current_day,
                                      activity_to_add=None, activity_to_remove=None, credit_to_take=0)
@@ -480,6 +474,7 @@ def _reset_team_activity(id_):
     activity = TeamActivity.query.filter_by(id=id_).first()
     activity.started_on_day = MAX_DAY
     activity.finished_on_day = MAX_DAY
+    activity.input_id = None
     activity.initiated_on_day = None
     commit_to_db(activity)
     return activity
@@ -487,15 +482,18 @@ def _reset_team_activity(id_):
 
 def validate_and_update_credit(credit, input_):
     # should allow 0
-    if credit is None:
+    validation_error = False
+    if credit in [0, None]:
         return True
 
     if credit > 0:
         if not credit % 300 == 0:
             flash(f'Credit should be increment of 300')
-            return False
+            validation_error = True
         if credit > 10000:
             flash(f'Maximum size of credit is 9900')
+            validation_error = True
+        if validation_error:
             return False
 
     input_.credit_to_take = credit
