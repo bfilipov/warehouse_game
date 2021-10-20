@@ -247,10 +247,12 @@ def _update_team_inputs(game_):
 
 def get_current_period_input(team_, game_):
     current_period_input = get_or_create(Input,
-                                         id=f'{game_.id}_{team_.id}_{game_.current_day}',
-                                         team_id=team_.id,
-                                         game_id=game_.id,
-                                         active_at_day=game_.current_day)
+                                         id=f'{game_.id}_{team_.id}_{game_.current_day}')
+    current_period_input.team_id = team_.id
+    current_period_input.game_id = game_.id,
+    current_period_input.active_at_day = game_.current_day
+    commit_to_db(current_period_input)
+
     if game_.current_day == 1:
         current_period_input.credit_taken = STARTING_FUNDS
         current_period_input.money_at_start_of_period = STARTING_FUNDS
