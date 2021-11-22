@@ -237,7 +237,7 @@ def game(game_id):
 def _update_team_inputs(game_):
     for team_ in game_.teams:
         for input_ in team_.inputs:
-            if game_.current_day <= input_.active_at_day:
+            if game_.current_day < input_.active_at_day:
                 for team_act in input_.activities:
                     db.session.delete(team_act)
                     db.session.commit()
@@ -249,7 +249,7 @@ def get_current_period_input(team_, game_):
     current_period_input = get_or_create(Input,
                                          id=f'{game_.id}_{team_.id}_{game_.current_day}')
     current_period_input.team_id = team_.id
-    current_period_input.game_id = game_.id,
+    current_period_input.game_id = game_.id
     current_period_input.active_at_day = game_.current_day
     commit_to_db(current_period_input)
 
@@ -453,8 +453,8 @@ def play():
             input_history.activity_to_remove = form.remove_activity.data.split('_')[-1]
 
         commit_to_db(input_history)
-    return redirect(url_for('main.play', form=form, state=state))
-    # return render_template('play.html', form=form, state=state)
+    return redirect(url_for('main.play_get'))
+    # return redirect(url_for('main.play_get', form=form, state=state))
 
 
 def set_team_activity(team_act, team_, game_):
