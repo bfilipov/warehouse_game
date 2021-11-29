@@ -1,5 +1,6 @@
 from functools import wraps
 
+from attr._make import Attribute
 from flask import current_app, flash, redirect, render_template, request, url_for, make_response
 from flask_babel import _
 from flask_login import current_user, login_user, logout_user, login_required
@@ -184,6 +185,23 @@ def games():
     return render_template('games.html', form=form, games=games_)
 
 
+@bp.route('/reports', methods=['GET'])
+@login_required
+@admin_required
+def reports():
+    games_ = Game.query.filter_by(is_active=True).all()
+    return render_template('reports.html',  games=games_)
+
+
+@bp.route('/reports/<game_id>', methods=['GET'])
+@login_required
+@admin_required
+def report(game_id):
+    game_ = Game.query.filter_by(id=game_id).first()
+    activities = Activity.query.all()
+    return render_template('report.html',  game=game_, activities=activities)
+
+
 @bp.route('/games/<game_id>/edit', methods=['GET', 'POST'])
 @login_required
 @admin_required
@@ -283,8 +301,9 @@ def _calculate_next_period(game_):
             else:
                 # if no funds available for current round, move activity for next round
                 # # should we activate team_activity from previous period for next period?
+                # lets try_not_to
                 team_act.input_id = next_period_input.id
-                team_act.initiated_on_day = next_period_input.active_at_day
+                # team_act.initiated_on_day = next_period_input.active_at_day
                 commit_to_db(team_act)
                 penalty = Penalty(input_id=next_period_input.id, activity_id=act.id)
                 commit_to_db(penalty)
@@ -331,11 +350,11 @@ def start_if_is_activity_eligible(act, team_act, available_money, team_, game_):
 
 
 def get_team_activities(game_, team_):
-    to_be_started = TeamActivity.query.filter_by(game=game_.id, team=team_.id,
+    to_be_started = TeamActivity.query.filter_by(game=game_.id, team_id=team_.id,
                                                  initiated_on_day=game_.current_day).all()
     finished = _get_finished_activities(team_, game_)
     in_progress = []
-    for ta in TeamActivity.query.filter_by(game=game_.id, team=team_.id).all():
+    for ta in TeamActivity.query.filter_by(game=game_.id, team_id=team_.id).all():
         if ta.started_on_day < game_.current_day and ta not in finished:
             in_progress.append(ta)
     return to_be_started, in_progress, finished
@@ -392,7 +411,7 @@ def play_get():
     form.remove_activity.choices = NONE_OPTION + [(a.id, activities_to_dict[a.activity_id])
                                                   for a in to_be_started]
 
-    if not (user_.is_cashier or user_.is_manager):
+    if not user_.is_manager:
         del form.add_activity
         del form.remove_activity
         del form.apply_for_credit
@@ -461,7 +480,7 @@ def set_team_activity(team_act, team_, game_):
     id_splited = team_act.id.split('_')
     activity = Activity.query.filter_by(id=id_splited[-1]).first()
     team_act.activity_id = activity.id
-    team_act.team = id_splited[1]
+    team_act.team_id = id_splited[1]
     team_act.game = id_splited[0]
     team_act.cost = activity.cost
     team_act.started_on_day = MAX_DAY
@@ -506,7 +525,7 @@ def validate_and_update_credit(credit, input_):
 
 def _get_finished_activities(team_, game_):
     result = []
-    for ta in TeamActivity.query.filter_by(team=team_.id, game=game_.id).all():
+    for ta in TeamActivity.query.filter_by(team_id=team_.id, game=game_.id).all():
         if game_.current_day >= ta.finished_on_day:
             result.append(ta)
     return result

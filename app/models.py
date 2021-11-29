@@ -27,7 +27,6 @@ class User(UserMixin, BaseModel):
     is_admin = db.Column(db.Boolean, default=False)
     is_superadmin = db.Column(db.Boolean, default=False)
     is_manager = db.Column(db.Boolean, default=False)
-    is_cashier = db.Column(db.Boolean, default=False)
     username = db.Column(db.String(64), index=True, unique=True)
     display_name = db.Column(db.String(120))
     email = db.Column(db.String(120), unique=True)
@@ -73,6 +72,7 @@ class User(UserMixin, BaseModel):
 
 class Team(BaseModel):
     inputs = db.relationship('Input', backref='team', lazy='dynamic')
+    activities = db.relationship('TeamActivity', backref='team', lazy='dynamic')
     display_name = db.Column(db.String(64))
     is_active = db.Column(db.Boolean, default=True)
     users = db.relationship('User', backref='team', lazy='dynamic')
@@ -145,7 +145,7 @@ class Activity(BaseModel):
 
 class TeamActivity(BaseModel):
     id = db.Column(db.String(64), primary_key=True, index=True)
-    team = db.Column(db.Integer, db.ForeignKey('team.id'))
+    team_id = db.Column(db.Integer, db.ForeignKey('team.id'))
     game = db.Column(db.Integer, db.ForeignKey('game.id'))
     activity_id = db.Column(db.String(64), db.ForeignKey('activity.id', ondelete="cascade"))
     cost = db.Column(db.Integer, default=100)  # add penalties here?

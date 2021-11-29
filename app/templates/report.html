@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% import 'bootstrap/wtf.html' as wtf %}
+{% block app_content %}
+    <table class="table table-striped table-hover">
+        <thead class="">
+            <tr>
+                <th scope="col">Team id</th>
+                <th scope="col">Day</th>
+                <th scope="col">Money start</th>
+                <th scope="col">Money end</th>
+                <th scope="col">Credit taken</th>
+                <th scope="col">Credit to take</th>
+                <th scope="col">Interest cost</th>
+                <th scope="col">Total penalty cost</th>
+                <th scope="col">Rent cost</th>
+                <th scope="col">Activity A</th>
+                <th scope="col">Activity B</th>
+                <th scope="col">Activity C</th>
+                <th scope="col">Activity D</th>
+                <th scope="col">Activity E</th>
+                <th scope="col">Activity F</th>
+                <th scope="col">Activity G</th>
+                <th scope="col">Activity H</th>
+                <th scope="col">Activity I</th>
+                <th scope="col">Activity J</th>
+                <th scope="col">Activity K</th>
+                <th scope="col">Activity L</th>
+        </thead>
+        {% for team in game.teams %}
+            <tr>
+            {% for input in team.inputs %}
+                <td>{{input.team.display_name}}</td>
+                <td>{{input.active_at_day}}</td>
+                <td>{{'%0.2f' % input.money_at_start_of_period}}</td>
+                <td>{{'%0.2f' % input.money_at_end_of_period}}</td>
+                <td>{{input.credit_taken}}</td>
+                <td>{{input.credit_to_take}}</td>
+                <td>{{'%0.2f' % input.interest_cost}}</td>
+                <td>{{'%0.2f' % input.total_penalty_cost}}</td>
+                <td>{{'%0.2f' % input.rent_cost}}</td>
+                {% for act in activities %}
+                    <td>
+                    {% for ta in team.activities %}
+                        {% if ta.activity_id == act.id %}
+                            {% if ta.started_on_day == input.active_at_day %}
+                                started
+                            {% elif ta.initiated_on_day == input.active_at_day %}
+                                failed
+                            {% endif %}
+                            {% if ta.finished_on_day == input.active_at_day %}
+                                finished
+                            {% endif %}
+                        {% endif %}
+                    {% endfor %}
+                    </td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        {% endfor %}
+
+    </table>
+    <hr>
+{% endblock %}

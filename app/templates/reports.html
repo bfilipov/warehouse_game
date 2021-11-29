@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% import 'bootstrap/wtf.html' as wtf %}
+{% block app_content %}
+    {% for game in games %}
+        <h4><a href="/reports/{{game.id}}">Report for game {{game.id}}</a></h4>
+        <hr>
+    {% endfor %}
+{% endblock %}

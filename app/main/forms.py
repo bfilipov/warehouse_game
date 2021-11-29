@@ -15,11 +15,10 @@ class TeamAssign(FlaskForm):
 
 class UserForm(FlaskForm):
     is_manager = BooleanField('is_manager', validators=[])
-    is_cashier = BooleanField('is_cashier', validators=[])
     username = StringField('username', validators=[DataRequired()])
     display_name = StringField('display_name', validators=[DataRequired()])
     # email = StringField('display_name', validators=[DataRequired()])
-    faculty_number = StringField('faculty_number', validators=[DataRequired()])
+    # faculty_number = StringField('faculty_number', validators=[DataRequired()])
     team_id = SelectField('Team', validators=[DataRequired()])
     submit = SubmitField('Save')
 
