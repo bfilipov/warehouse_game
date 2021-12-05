@@ -32,6 +32,7 @@
                         <li><a href="{{ url_for('auth.logout') }}">Logout</a></li>
                     {% else %}
                         <li><a href="{{ url_for('main.play') }}">Game</a></li>
+                        <li><a href="{{ url_for('main.team_results') }}">Results</a></li>
                         <li><a href="{{ url_for('auth.logout') }}">Logout</a></li>
                     {% endif %}
                 </ul>

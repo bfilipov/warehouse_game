@@ -476,6 +476,21 @@ def play():
     # return redirect(url_for('main.play_get', form=form, state=state))
 
 
+@bp.route('/results', methods=['GET'])
+@login_required
+def team_results():
+    # user_ = current_user
+    try:
+        team_ = current_team()
+        game_ = current_game()
+    except AttributeError as e:
+        flash('Not yet started')
+
+    game_stub = {'teams': [team_]}
+    activities = Activity.query.all()
+    return render_template('report.html', game=game_stub, activities=activities)
+
+
 def set_team_activity(team_act, team_, game_):
     id_splited = team_act.id.split('_')
     activity = Activity.query.filter_by(id=id_splited[-1]).first()
