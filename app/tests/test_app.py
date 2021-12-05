@@ -171,13 +171,11 @@ class MainRoutesTest(BaseTest):
                 csrf_token=csrf_resp,
                 username='test_user2',
                 display_name='test_user2',
-                faculty_number='123',
                 team_id=team.id,
                 submit='Save'), follow_redirects=True)
 
             self.assertEqual(resp.status, '200 OK')
             self.assertEqual(user.username, 'test_user2')
-            self.assertEqual(user.faculty_number, '123')
             self.assertEqual(user.team_id, team.id)
 
     def test_games(self):
@@ -355,7 +353,7 @@ class MainGameRoutesTest(BaseTest):
 
             # not started one
             self.assertEqual(ta2.started_on_day, routes.MAX_DAY)
-            self.assertEqual(ta2.initiated_on_day, new_period.active_at_day)
+            self.assertEqual(ta2.initiated_on_day, old_period.active_at_day)
             self.assertEqual(ta2.finished_on_day, routes.MAX_DAY)
             self.assertEqual(ta2.first_time_ever_initiated_on_day, start_day)
 
