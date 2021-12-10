@@ -1,10 +1,10 @@
+import io
+import csv
 from functools import wraps
 
-from attr._make import Attribute
-from flask import current_app, flash, redirect, render_template, request, url_for, make_response
+from flask import flash, redirect, render_template, url_for, make_response
 from flask_babel import _
-from flask_login import current_user, login_user, logout_user, login_required
-from werkzeug.urls import url_parse
+from flask_login import current_user, login_required
 
 from app import db
 from app.auth.routes import admin_required
@@ -473,22 +473,60 @@ def play():
 
         commit_to_db(input_history)
     return redirect(url_for('main.play_get'))
-    # return redirect(url_for('main.play_get', form=form, state=state))
 
 
 @bp.route('/results', methods=['GET'])
 @login_required
 def team_results():
-    # user_ = current_user
     try:
         team_ = current_team()
-        game_ = current_game()
-    except AttributeError as e:
+    except AttributeError:
         flash('Not yet started')
-
     game_stub = {'teams': [team_]}
     activities = Activity.query.all()
     return render_template('report.html', game=game_stub, activities=activities)
+
+
+@bp.route('/admin/download_results/<game_id>')
+@login_required
+@admin_required
+def admin_download_results(game_id):
+    """
+    View download totals for all games """
+    game_ = Game.query.filter_by(id=game_id).first()
+    columns = {"team_id": "Team id", "active_at_day": "Day",
+               "money_at_start_of_period": "Money start",
+               "money_at_end_of_period": "Money end", "credit_taken": "Credit taken",
+               "credit_to_take": "Credit to take", "interest_cost": "Interest costs",
+               "total_penalty_cost": "Total penalty cost", "rent_cost": "Rent cost"}
+
+    activities = ["Activity A", "Activity B",
+                  "Activity C", "Activity D",
+                  "Activity E", "Activity F",
+                  "Activity G", "Activity H",
+                  "Activity I", "Activity J",
+                  "Activity K}", "Activity L"]
+
+    if not game_:
+        flash('No games existing')
+        return redirect(url_for('games'))
+
+    si = io.StringIO()
+    cw = csv.writer(si)
+    cw.writerow(list(columns.keys()) + activities)
+    for team in game_.teams:
+        import pdb; pdb.set_trace()
+        for input_ in team.inputs.order_by(Input.active_at_day.asc()).all():
+            cw.writerow([getattr(input_, k) for k in columns] +
+                        ['started' if ta.started_on_day == input_.active_at_day else
+                         'initiated' if ta.initiated_on_day == input_.active_at_day else
+                         'finished' if ta.finished_on_day == input_.active_at_day else
+                         ''
+                         for ta in input_.activities])
+    output = make_response(si.getvalue())
+    output.headers["Content-Disposition"] = "attachment; filename=results.csv"
+    output.headers["Content-type"] = "text/csv"
+    return output
 
 
 def set_team_activity(team_act, team_, game_):
