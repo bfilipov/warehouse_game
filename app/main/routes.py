@@ -201,6 +201,31 @@ def report(game_id):
     activities = Activity.query.all()
     return render_template('report.html',  game=game_, activities=activities)
 
+@bp.route('/game_status/<game_id>', methods=['GET'])
+@login_required
+@admin_required
+def game_status(game_id):
+    game_ = Game.query.filter_by(id=game_id).first()
+    teams_stub = []
+
+    for team_ in game_.teams.all():
+        current_input = Input.query.filter_by(team_id=team_.id, active_at_day=game_.current_day).first()
+        t = {}
+        t.update({'id': team_.id})
+        t.update({'day': game_.current_day})
+        t.update({'current_money': current_input.money_at_start_of_period})
+        t.update({'credit_taken': current_input.credit_taken})
+        t.update({'finished': [ta.activity_id for ta in _get_finished_activities(team_, game_)]})
+        t.update({'total_interest_cost': sum([i.interest_cost
+                                              for i in Input.query.filter_by(team_id=team_.id).all()])})
+        t.update({'total_penalty_cost': sum([i.total_penalty_cost
+                                             for i in Input.query.filter_by(team_id=team_.id).all()])})
+        t.update({'total_rent_cost': sum([i.rent_cost
+                                          for i in Input.query.filter_by(team_id=team_.id).all()])})
+        teams_stub.append(t)
+
+    return render_template('main_report.html',  teams=teams_stub)
+
 
 @bp.route('/games/<game_id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -249,7 +274,19 @@ def game(game_id):
             game_.decrease_current_day(PERIOD_INCREMENT_IN_DAYS)
             commit_to_db(game_)
             _update_team_inputs(game_)
+            _reset_current_input(game_)
     return render_template('game.html', form=form, game=game_)
+
+
+def _reset_current_input(game_):
+    for team_ in game_.teams:
+        current_input = Input.query.filter_by(team_id=team_.id, active_at_day=game_.current_day).first()
+        current_input.credit_to_take = 0
+        for ta in current_input.activities.all():
+            if ta.initiated_on_day == game_.current_day:
+                db.session.delete(ta)
+                db.session.commit()
+        commit_to_db(current_input)
 
 
 def _update_team_inputs(game_):
@@ -302,9 +339,9 @@ def _calculate_next_period(game_):
                 # if no funds available for current round, move activity for next round
                 # # should we activate team_activity from previous period for next period?
                 # lets try_not_to
-                team_act.input_id = next_period_input.id
+                # team_act.input_id = next_period_input.id
                 # team_act.initiated_on_day = next_period_input.active_at_day
-                commit_to_db(team_act)
+                # commit_to_db(team_act)
                 penalty = Penalty(input_id=next_period_input.id, activity_id=act.id)
                 commit_to_db(penalty)
 
@@ -515,7 +552,6 @@ def admin_download_results(game_id):
     cw = csv.writer(si)
     cw.writerow(list(columns.keys()) + activities)
     for team in game_.teams:
-        import pdb; pdb.set_trace()
         for input_ in team.inputs.order_by(Input.active_at_day.asc()).all():
             cw.writerow([getattr(input_, k) for k in columns] +
                         ['started' if ta.started_on_day == input_.active_at_day else
