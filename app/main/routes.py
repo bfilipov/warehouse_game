@@ -216,7 +216,7 @@ def game_status(game_id):
             t.update({'day': game_.current_day})
             t.update({'current_money': current_input.money_at_start_of_period})
             t.update({'credit_taken': current_input.credit_taken})
-            t.update({'finished': [ta.activity_id for ta in _get_finished_activities(team_, game_)]})
+            t.update({'finished': sorted([ta.activity_id for ta in _get_finished_activities(team_, game_)])})
             t.update({'total_interest_cost': sum([i.interest_cost
                                                   for i in Input.query.filter_by(team_id=team_.id).all()])})
             t.update({'total_penalty_cost': sum([i.total_penalty_cost
@@ -357,8 +357,7 @@ def _update_funds_for_current_and_next_period(current_period_input, next_period_
     total_penalty = sum([i.fine for i in next_period_penalties])
     next_period_input.total_penalty_cost = total_penalty
     next_period_input.credit_taken = (current_period_input.credit_taken
-                                      + current_period_input.credit_to_take
-                                      - profit)
+                                      + current_period_input.credit_to_take)
     next_period_input.interest_cost = current_period_input.credit_taken * (
             INTEREST_RATE_PER_MONTH * (PERIOD_INCREMENT_IN_DAYS / DAYS_IN_GAME_MONTH))
     next_period_input.rent_cost = RENT_PER_MONTH if (
@@ -368,6 +367,16 @@ def _update_funds_for_current_and_next_period(current_period_input, next_period_
                                                   - next_period_input.total_penalty_cost
                                                   - next_period_input.interest_cost
                                                   - next_period_input.rent_cost)
+    # start to return the credit after on profit
+    if profit > 0:
+        if next_period_input.credit_taken > 0 and next_period_input.money_at_start_of_period > 0:
+            if next_period_input.credit_taken <= next_period_input.money_at_start_of_period:
+                next_period_input.money_at_start_of_period -= next_period_input.credit_taken
+                next_period_input.credit_taken = 0
+            else:
+                next_period_input.credit_taken -= next_period_input.money_at_start_of_period
+                next_period_input.money_at_start_of_period = 0
+
     current_period_input.money_at_end_of_period = next_period_input.money_at_start_of_period
     commit_to_db(current_period_input)
     commit_to_db(next_period_input)
