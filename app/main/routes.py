@@ -210,19 +210,20 @@ def game_status(game_id):
 
     for team_ in game_.teams.all():
         current_input = Input.query.filter_by(team_id=team_.id, active_at_day=game_.current_day).first()
-        t = {}
-        t.update({'id': team_.id})
-        t.update({'day': game_.current_day})
-        t.update({'current_money': current_input.money_at_start_of_period})
-        t.update({'credit_taken': current_input.credit_taken})
-        t.update({'finished': [ta.activity_id for ta in _get_finished_activities(team_, game_)]})
-        t.update({'total_interest_cost': sum([i.interest_cost
+        if current_input:
+            t = {}
+            t.update({'id': team_.id})
+            t.update({'day': game_.current_day})
+            t.update({'current_money': current_input.money_at_start_of_period})
+            t.update({'credit_taken': current_input.credit_taken})
+            t.update({'finished': [ta.activity_id for ta in _get_finished_activities(team_, game_)]})
+            t.update({'total_interest_cost': sum([i.interest_cost
+                                                  for i in Input.query.filter_by(team_id=team_.id).all()])})
+            t.update({'total_penalty_cost': sum([i.total_penalty_cost
+                                                 for i in Input.query.filter_by(team_id=team_.id).all()])})
+            t.update({'total_rent_cost': sum([i.rent_cost
                                               for i in Input.query.filter_by(team_id=team_.id).all()])})
-        t.update({'total_penalty_cost': sum([i.total_penalty_cost
-                                             for i in Input.query.filter_by(team_id=team_.id).all()])})
-        t.update({'total_rent_cost': sum([i.rent_cost
-                                          for i in Input.query.filter_by(team_id=team_.id).all()])})
-        teams_stub.append(t)
+            teams_stub.append(t)
 
     return render_template('main_report.html',  teams=teams_stub)
 
