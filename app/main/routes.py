@@ -323,10 +323,11 @@ def _calculate_next_period(game_):
         current_period_input = get_current_period_input(team_, game_)
         next_period_day = game_.current_day + PERIOD_INCREMENT_IN_DAYS
         next_period_input = get_or_create(Input,
-                                          id=f'{game_.id}_{team_.id}_{next_period_day}',
-                                          team_id=team_.id,
-                                          game_id=game_.id,
-                                          active_at_day=next_period_day)
+                                          id=f'{game_.id}_{team_.id}_{next_period_day}')
+        # todo: patched on 16.12.21
+        next_period_input.team_id = team_.id
+        next_period_input.game_id = game_.id
+        next_period_input.active_at_day = next_period_day
 
         _, _, finished = get_team_activities(game_, team_)
         completed_all = set([i.activity_id for i in finished]) == set([i.id for i in all_activities])
