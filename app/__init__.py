@@ -10,8 +10,6 @@ from flask_mail import Mail
 from flask_bootstrap import Bootstrap
 from flask_moment import Moment
 from flask_babel import Babel, lazy_gettext as _l
-from redis import Redis
-import rq
 
 from app.config import Config
 
@@ -39,8 +37,6 @@ def create_app(config_class=Config):
     bootstrap.init_app(app)
     moment.init_app(app)
     babel.init_app(app)
-    app.redis = Redis.from_url(app.config['REDIS_URL'])
-    app.task_queue = rq.Queue('warehouse-ame-tasks', connection=app.redis)
 
     # if not app.debug:
     #     if not os.path.exists('logs'):
