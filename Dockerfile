@@ -1,8 +1,9 @@
 FROM python:3.10-bullseye
 
-COPY requirements.txt game.py .flaskenv entrypoint.sh ./game/
+COPY requirements.txt populate_db.py game.py .flaskenv entrypoint.sh ./game/
 
 ADD app ./game/app
+ADD migrations ./game/migrations
 
 WORKDIR game
 
