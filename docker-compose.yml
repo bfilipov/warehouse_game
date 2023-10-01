@@ -28,10 +28,8 @@ services:
     depends_on:
       - db
     volumes:
-      - migrations:/game/migrations
+      - .:/game
 
 volumes:
-  migrations:
-    driver: local
   db:
     driver: local

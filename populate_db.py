@@ -83,8 +83,7 @@ class ActivityAdder:
             db.session.commit()
 
 
-if __name__ == "__main__":
-    app = create_app()
+def populate_the_db():
     with app.app_context():
         adder = ActivityAdder()
         adder.create_activities()
@@ -123,3 +122,11 @@ if __name__ == "__main__":
             db.session.commit()
             logger.info(f'Created new user \n'
                         f'{new_user} pass {new_user.username + "321"}')
+
+
+if __name__ == "__main__":
+    # a bit hacky way to init the db
+    with app.app_context():
+        admin = User.query.filter_by(username='admin').first()
+        if not admin:
+            populate_the_db()
