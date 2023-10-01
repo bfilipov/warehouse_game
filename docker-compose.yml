@@ -1,0 +1,37 @@
+version: '3.3'
+services:
+
+  db:
+    image: postgres:12.1-alpine
+    restart: always
+    environment:
+      - POSTGRES_DB=${FLASK_APP_DATABASE_DB}
+      - POSTGRES_USER=${FLASK_APP_DATABASE_USER}
+      - POSTGRES_PASSWORD=${FLASK_APP_DATABASE_PASSWORD}
+    ports:
+      - '5432:5432'
+    volumes: 
+      - db:/var/lib/postgresql/data
+
+  warehouse:
+    image: wg_local_2
+    restart: always
+    environment:
+      - FLASK_APP_DATABASE_HOST=db
+      - FLASK_APP_DATABASE_PORT=5432
+      - FLASK_APP_SECRET_KEY=${FLASK_APP_SECRET_KEY}
+      - FLASK_APP_DATABASE_USER=${FLASK_APP_DATABASE_USER}
+      - FLASK_APP_DATABASE_PASSWORD=${FLASK_APP_DATABASE_PASSWORD}
+      - FLASK_APP_DATABASE_DB=${FLASK_APP_DATABASE_DB}
+    ports:
+      - '5001:5001'
+    depends_on:
+      - db
+    volumes:
+      - migrations:/game/migrations
+
+volumes:
+  migrations:
+    driver: local
+  db:
+    driver: local
