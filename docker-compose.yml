@@ -31,7 +31,7 @@ services:
       - db:/var/lib/postgresql/data
 
   warehouse:
-    image: bacebogo/warehouse_game_1:13
+    image: bacebogo/warehouse:14
     restart: always
     environment:
       - FLASK_APP_DATABASE_HOST=db
